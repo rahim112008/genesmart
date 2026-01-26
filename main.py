@@ -180,54 +180,61 @@ elif menu == "🧬 Simulateur de Croisement":
             c_res1.metric("Consanguinité F", "1.25%", "🟢 SÉCURISÉ")
             c_res2.metric("Vigueur Hybride", "+15%", "⬆️")
 
-# --- PAGE 5 : EXPERTISE & PRÉDICTION GÉNOTYPIQUE (VERSION ROBUSTE) ---
+# --- PAGE 5 : EXPERTISE & PRÉDICTION GÉNOTYPIQUE (AVEC SÉLECTEUR D'ID) ---
 elif menu == "🔍 Recherche GenBank (NCBI)":
     st.title("🔬 Expertise Phénomique & Prédiction")
-    
-    # 1. SÉCURITÉ : Initialisation des variables si l'utilisateur n'a rien saisi
-    # On récupère les valeurs des widgets ou on met des standards (moyennes de race)
-    p_vif = v1 if 'v1' in locals() else 50.0
-    h_gar = v2 if 'v2' in locals() else 72.0
-    p_tho = v5 if 'v5' in locals() else 88.0
-    l_cor = v4 if 'v4' in locals() else 80.0
-    l_poi = v7 if 'v7' in locals() else 28.0
 
-    # 2. INTERFACE
+    # 1. CASE DE SÉLECTION DE L'ID
+    # On récupère la liste des IDs présents dans la base de données
+    liste_ids = st.session_state.db_data["ID Animal"].tolist()
+    
+    id_select = st.selectbox("🎯 Choisir l'ID de l'animal à analyser :", liste_ids)
+
+    # 2. RÉCUPÉRATION AUTOMATIQUE DES DONNÉES DE CET ANIMAL
+    # On va chercher les mesures correspondantes dans le DataFrame
+    donnees_animal = st.session_state.db_data[st.session_state.db_data["ID Animal"] == id_select]
+    
+    # On extrait les valeurs (ou on met des moyennes si l'ID est nouveau)
+    if not donnees_animal.empty:
+        p_vif = donnees_animal["Poids (kg)"].values[0]
+        # Pour les autres mesures (Garrot, Poitrine), si elles ne sont pas dans ton DataFrame principal,
+        # on utilise les variables saisies dans l'onglet Identification
+        h_gar = v2 if 'v2' in locals() else 72.0
+        p_tho = v5 if 'v5' in locals() else 88.0
+        l_cor = v4 if 'v4' in locals() else 80.0
+        l_poi = v7 if 'v7' in locals() else 28.0
+    else:
+        st.warning("Aucune donnée trouvée pour cet ID. Utilisation des valeurs par défaut.")
+        p_vif, h_gar, p_tho, l_cor, l_poi = 50.0, 72.0, 88.0, 80.0, 28.0
+
+    # 3. AFFICHAGE DES RÉSULTATS (Onglets)
     tab_index, tab_predict, tab_trans = st.tabs(["📊 Index Zootechniques", "🔮 Prédiction Génotype", "🧬 Transmission Estimée"])
 
     with tab_index:
-        st.subheader("📈 Confirmation par Index Morphométriques")
-        # Calculs automatiques
-        it = (p_tho / h_gar) # Indice Thoracique
-        ic = (h_gar / l_cor) # Indice de Compacité
+        st.subheader(f"📈 Analyse Morphométrique de {id_select}")
+        it = (p_tho / h_gar)
+        ic = (h_gar / l_cor)
         
         c1, c2 = st.columns(2)
-        c1.metric("Indice Thoracique", f"{it:.2f}", help="Standard : 1.20")
-        c2.metric("Compacité", f"{ic:.2f}", help="Indique le développement musculaire")
+        c1.metric("Indice Thoracique", f"{it:.2f}")
+        c2.metric("Indice de Compacité", f"{ic:.2f}")
         
-        # Petit graphique de positionnement
-        fig_idx = px.bar(x=["Thorax", "Compacité"], y=[it, ic], 
-                         title="Profil Biométrique de l'Individu",
-                         range_y=[0, 2])
-        st.plotly_chart(fig_idx, use_container_width=True)
+        st.plotly_chart(px.bar(x=["Thorax", "Compacité"], y=[it, ic], color=["Thorax", "Compacité"], title=f"Profil de {id_select}"), use_container_width=True)
 
     with tab_predict:
-        st.subheader("🔮 Inférence du Génotype Probable")
-        # Ici on utilise les mesures pour "deviner" les gènes
-        if p_vif > 55 and l_poi > 30:
-            st.warning("🧬 **Gène MSTN (Myostatine) :** Probabilité élevée de mutation de croissance.")
+        st.subheader(f"🔮 Prédiction Génomique de {id_select}")
+        # Logique de prédiction basée sur le poids réel de l'animal sélectionné
+        if p_vif > 55:
+            st.warning(f"⚠️ **Alerte Génomique :** L'ID {id_select} présente un phénotype hautement corrélé au gène Myostatine (MSTN).")
         else:
-            st.success("🧬 **Gène MSTN :** Profil conforme au standard de croissance.")
-        
-        if 'q7' in locals() and q7 == "Absentes (Mottes)":
-            st.info("🧬 **Locus P (Cornes) :** Génotype prédit Homozygote Dominant (P/P).")
+            st.success(f"✅ **Profil Standard :** L'ID {id_select} suit une courbe de croissance génétique classique.")
 
     with tab_trans:
-        st.subheader("🧬 Potentiel de Transmission")
-        h2 = 0.35 # Héritabilité standard
-        progret = h2 * (p_vif - 50.0)
-        st.metric("Gain génétique transmissible", f"{progret:+.2f} kg")
-        st.write("Ce bélier améliorera la descendance si le gain est positif.")
+        st.subheader("🧬 Potentiel Reproducteur")
+        h2 = 0.35
+        gain = h2 * (p_vif - 50.0)
+        st.write(f"Valeur Génétique Estimée pour **{id_select}** :")
+        st.metric("Progrès Génétique (kg)", f"{gain:+.2f}")
     
     # ... (Le reste du code reste le même)
 # --- PAGE 6 : GESTION DES DONNÉES ---
