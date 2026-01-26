@@ -180,20 +180,54 @@ elif menu == "🧬 Simulateur de Croisement":
             c_res1.metric("Consanguinité F", "1.25%", "🟢 SÉCURISÉ")
             c_res2.metric("Vigueur Hybride", "+15%", "⬆️")
 
-# --- PAGE 5 : EXPERTISE & PRÉDICTION GÉNOTYPIQUE (VERSION SÉCURISÉE) ---
+# --- PAGE 5 : EXPERTISE & PRÉDICTION GÉNOTYPIQUE (VERSION ROBUSTE) ---
 elif menu == "🔍 Recherche GenBank (NCBI)":
     st.title("🔬 Expertise Phénomique & Prédiction")
     
-    # Sécurité : On vérifie si les variables existent, sinon on met des valeurs standards
-    # Cela évite le message d'erreur rouge au lancement
-    poids_actuel = v1 if 'v1' in locals() else 50.0
-    ht_garrot = v2 if 'v2' in locals() else 72.0
-    tp = v5 if 'v5' in locals() else 88.0
-    lg_corps = v4 if 'v4' in locals() else 80.0
-    largeur_poitrine = v7 if 'v7' in locals() else 28.0
+    # 1. SÉCURITÉ : Initialisation des variables si l'utilisateur n'a rien saisi
+    # On récupère les valeurs des widgets ou on met des standards (moyennes de race)
+    p_vif = v1 if 'v1' in locals() else 50.0
+    h_gar = v2 if 'v2' in locals() else 72.0
+    p_tho = v5 if 'v5' in locals() else 88.0
+    l_cor = v4 if 'v4' in locals() else 80.0
+    l_poi = v7 if 'v7' in locals() else 28.0
 
-    # L'application ne plantera plus car elle utilisera ces chiffres par défaut
+    # 2. INTERFACE
     tab_index, tab_predict, tab_trans = st.tabs(["📊 Index Zootechniques", "🔮 Prédiction Génotype", "🧬 Transmission Estimée"])
+
+    with tab_index:
+        st.subheader("📈 Confirmation par Index Morphométriques")
+        # Calculs automatiques
+        it = (p_tho / h_gar) # Indice Thoracique
+        ic = (h_gar / l_cor) # Indice de Compacité
+        
+        c1, c2 = st.columns(2)
+        c1.metric("Indice Thoracique", f"{it:.2f}", help="Standard : 1.20")
+        c2.metric("Compacité", f"{ic:.2f}", help="Indique le développement musculaire")
+        
+        # Petit graphique de positionnement
+        fig_idx = px.bar(x=["Thorax", "Compacité"], y=[it, ic], 
+                         title="Profil Biométrique de l'Individu",
+                         range_y=[0, 2])
+        st.plotly_chart(fig_idx, use_container_width=True)
+
+    with tab_predict:
+        st.subheader("🔮 Inférence du Génotype Probable")
+        # Ici on utilise les mesures pour "deviner" les gènes
+        if p_vif > 55 and l_poi > 30:
+            st.warning("🧬 **Gène MSTN (Myostatine) :** Probabilité élevée de mutation de croissance.")
+        else:
+            st.success("🧬 **Gène MSTN :** Profil conforme au standard de croissance.")
+        
+        if 'q7' in locals() and q7 == "Absentes (Mottes)":
+            st.info("🧬 **Locus P (Cornes) :** Génotype prédit Homozygote Dominant (P/P).")
+
+    with tab_trans:
+        st.subheader("🧬 Potentiel de Transmission")
+        h2 = 0.35 # Héritabilité standard
+        progret = h2 * (p_vif - 50.0)
+        st.metric("Gain génétique transmissible", f"{progret:+.2f} kg")
+        st.write("Ce bélier améliorera la descendance si le gain est positif.")
     
     # ... (Le reste du code reste le même)
 # --- PAGE 6 : GESTION DES DONNÉES ---
