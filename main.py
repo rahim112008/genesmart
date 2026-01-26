@@ -6,180 +6,103 @@ from datetime import datetime, timedelta
 import numpy as np
 import time
 
-# --- 1. CONFIGURATION INTERFACE ---
-st.set_page_config(
-    page_title="GeneSmart Expert v3.0 | Research Suite", 
-    layout="wide", 
-    page_icon="🧬"
-)
+# --- 1. CONFIGURATION ---
+st.set_page_config(page_title="GeneSmart Expert v3.0", layout="wide", page_icon="🧬")
 
-# --- 2. INITIALISATION (Structure flexible) ---
+# --- 2. INITIALISATION (Noms de colonnes simplifiés pour éviter les erreurs) ---
 if 'db_data' not in st.session_state:
-    st.session_state.db_data = pd.DataFrame({
-        "ID": ["DZ-2026-001", "PLANTE-X"],
-        "Règne": ["Animal", "Végétal"],
-        "Stade": ["2 dents", "Floraison"],
-        "Poids/Rendement": [45.0, 12.5],
-        "Mesure_2": [75.0, 80.0],
-        "Caractère_Quali": ["Blanc", "Vert foncé"]
-    })
+    st.session_state.db_data = pd.DataFrame(columns=["ID", "Regne", "Stade", "Mesure_1", "Mesure_2", "Mesure_3", "Obs_1", "Obs_2", "Date"])
 
-# --- 3. NAVIGATION & RÉGNE ---
+# --- 3. BARRE LATÉRALE ---
 st.sidebar.title("🧬 GeneSmart Pro")
-regne = st.sidebar.selectbox("🔬 Domaine de Recherche", ["Élevage (Animal)", "Agronomie (Végétal)"])
+regne_choice = st.sidebar.selectbox("🔬 Domaine de Recherche", ["Élevage (Animal)", "Agronomie (Végétal)"])
 st.sidebar.markdown("---")
-
 menu = st.sidebar.radio("Expertise & Analyse", [
     "📊 Tableau de Bord", 
     "🆔 Identification Dynamique", 
     "💉 Suivi & Reproduction", 
-    "🧬 Simulateur de Sélection",
     "🔍 Recherche & Expertise",
     "🗂️ Gestion de la Base"
 ])
 
-# --- PAGE 1 : ANALYSES ---
+# --- PAGE 1 : TABLEAU DE BORD ---
 if menu == "📊 Tableau de Bord":
-    st.title(f"📊 Analyses : {regne}")
-    t_gen, t_stat = st.tabs(["🧬 Génétique", "📉 Statistiques"])
-    
-    with t_gen:
-        c1, c2 = st.columns(2)
-        c1.metric("Diversité Génétique", "0.78" if regne == "Animal" else "0.82", "Stable")
-        c2.metric("Taux d'homozygotie", "0.12", "Normal")
-        st.plotly_chart(px.bar(x=['Pop A', 'Pop B', 'Pop C'], y=[10, 25, 15], title="Distribution Géographique"), use_container_width=True)
+    st.title(f"📊 Analyses : {regne_choice}")
+    c1, c2 = st.columns(2)
+    with c1:
+        st.metric("Échantillons Totaux", len(st.session_state.db_data))
+    with c2:
+        st.metric("Dernière Mise à jour", datetime.now().strftime("%H:%M"))
+    st.info("Les analyses globales s'afficheront ici après la saisie de plusieurs individus.")
 
-    with t_stat:
-        st.subheader("Analyse en Composantes Principales (Simulation)")
-        df_acp = pd.DataFrame({'PC1': np.random.randn(20), 'PC2': np.random.randn(20), 'Groupe': ['A']*10 + ['B']*10})
-        st.plotly_chart(px.scatter(df_acp, x='PC1', y='PC2', color='Groupe', title="Plan Factoriel (Phénomique)"), use_container_width=True)
-
-# --- PAGE 2 : IDENTIFICATION DYNAMIQUE (LA CLÉ) ---
+# --- PAGE 2 : IDENTIFICATION DYNAMIQUE ---
 elif menu == "🆔 Identification Dynamique":
-    st.title(f"🆔 Caractérisation : {regne}")
-    st.info(f"Saisie libre des descripteurs selon les standards {'FAO' if regne == 'Animal' else 'UPOV'}")
+    st.title(f"🆔 Caractérisation : {regne_choice}")
+    
+    # Définition automatique des noms des champs selon le règne
+    label1 = "Poids (kg)" if "Animal" in regne_choice else "Rendement (q/ha)"
+    label2 = "Hauteur Garrot (cm)" if "Animal" in regne_choice else "Hauteur Tige (cm)"
+    label3 = "Périmètre Thorax (cm)" if "Animal" in regne_choice else "Nombre Grains"
+    
+    with st.form("form_global"):
+        col_id, col_st = st.columns(2)
+        id_val = col_id.text_input("Identifiant Unique", "DZ-")
+        st_val = col_st.text_input("Stade (Âge/BBCH)", "2 dents" if "Animal" in regne_choice else "Floraison")
+        
+        st.subheader("📏 Mesures Quantitatives")
+        c1, c2, c3 = st.columns(3)
+        m1 = c1.number_input(label1, value=0.0)
+        m2 = c2.number_input(label2, value=0.0)
+        m3 = c3.number_input(label3, value=0.0)
+        
+        st.subheader("🎨 Caractères Qualitatifs")
+        obs1 = st.text_input("Couleur / Variété", "Blanc" if "Animal" in regne_choice else "Blé dur")
+        obs2 = st.text_input("Cornes / Résistance", "Spiralées" if "Animal" in regne_choice else "Forte")
+        
+        if st.form_submit_button("💾 Enregistrer dans le LIMS"):
+            new_row = {
+                "ID": id_val, "Regne": regne_choice, "Stade": st_val,
+                "Mesure_1": m1, "Mesure_2": m2, "Mesure_3": m3,
+                "Obs_1": obs1, "Obs_2": obs2, "Date": datetime.now().strftime("%Y-%m-%d")
+            }
+            st.session_state.db_data = pd.concat([st.session_state.db_data, pd.DataFrame([new_row])], ignore_index=True)
+            st.success(f"Données de {id_val} enregistrées !")
+            st.balloons()
 
-    with st.form("dynamic_form"):
-        c1, c2 = st.columns(2)
-        id_sujet = c1.text_input("Identifiant Unique", "DZ-")
-        stade = c2.text_input("Stade (Âge / BBCH / Dentition)", "2 dents" if regne == "Animal" else "Tallage")
-
-        st.markdown("---")
-        # --- SECTION QUANTITATIVE (CHIFFRES) ---
-st.subheader("📏 Paramètres Biométriques (Quantitatifs)")
-cq1, cq2, cq3 = st.columns(3)
-
-# On définit les étiquettes par défaut selon le règne choisi
-default_q1 = "Poids (kg)" if regne == "Élevage (Animal)" else "Rendement (q/ha)"
-default_q2 = "Hauteur Garrot (cm)" if regne == "Élevage (Animal)" else "Hauteur Tige (cm)"
-default_q3 = "Périmètre Thoracique (cm)" if regne == "Élevage (Animal)" else "Nombre Grains"
-
-label_q1 = cq1.text_input("Nom Caractère 1", value=default_q1)
-val_q1 = cq1.number_input("Valeur 1", value=0.0, key="val1")
-
-label_q2 = cq2.text_input("Nom Caractère 2", value=default_q2)
-val_q2 = cq2.number_input("Valeur 2", value=0.0, key="val2")
-
-label_q3 = cq3.text_input("Nom Caractère 3", value=default_q3)
-val_q3 = cq3.number_input("Valeur 3", value=0.0, key="val3")
-
-st.markdown("---")
-
-# --- SECTION QUALITATIVE (TEXTE) ---
-st.subheader("🎨 Caractères Morphologiques (Qualitatifs)")
-cql1, cql2 = st.columns(2)
-
-default_ql1 = "Couleur Robe" if regne == "Élevage (Animal)" else "Forme Feuille"
-default_ql2 = "Présence Cornes" if regne == "Élevage (Animal)" else "Type Fruit/Inflorescence"
-
-label_ql1 = cql1.text_input("Descripteur 1", value=default_ql1)
-val_ql1 = cql1.text_input("Observation 1", key="obs1")
-
-label_ql2 = cql2.text_input("Descripteur 2", value=default_ql2)
-val_ql2 = cql2.text_input("Observation 2", key="obs2")
-
-# --- PAGE 3 : SUIVI & REPRO ---
+# --- PAGE 3 : SUIVI & REPRODUCTION ---
 elif menu == "💉 Suivi & Reproduction":
-    st.title("💉 Gestion Technique")
-    if regne == "Animal":
-        st.subheader("🤰 Prédiction Mise Bas")
-        date_e = st.date_input("Date Pose Éponge", datetime.now())
-        st.info(f"Mise bas prévue : {(date_e + timedelta(days=166)).strftime('%d/%m/%Y')}")
-    else:
-        st.subheader("🌱 Cycle de Croissance")
-        date_s = st.date_input("Date de Semis", datetime.now())
-        st.warning(f"Récolte estimée : {(date_s + timedelta(days=120)).strftime('%d/%m/%Y')}")
+    st.title("💉 Gestion du Cycle")
+    date_ref = st.date_input("Date de référence (Semis ou Pose Éponge)", datetime.now())
+    jours = 150 if "Animal" in regne_choice else 120
+    st.warning(f"Échéance prévue (Mise bas ou Récolte) : {(date_ref + timedelta(days=jours)).strftime('%d/%m/%Y')}")
 
-# --- PAGE 4 : CROISEMENT ---
-elif menu == "🧬 Simulateur de Sélection":
-    st.title("🧬 Amélioration Génétique")
-    liste_ids = st.session_state.db_data[st.session_state.db_data["Règne"] == regne]["ID"].tolist()
-    
-    if len(liste_ids) >= 2:
-        c1, c2 = st.columns(2)
-        p1 = c1.selectbox("Parent 1", liste_ids)
-        p2 = c2.selectbox("Parent 2", liste_ids)
-        if st.button("Calculer Gain Génétique"):
-            st.success("Gain estimé : +15% sur le caractère principal")
-    else:
-        st.warning("Il faut au moins deux individus du même règne pour simuler un croisement.")
-
-# --- PAGE 5 : EXPERTISE DYNAMIQUE (REMPLACEMENT) ---
+# --- PAGE 4 : RECHERCHE & EXPERTISE (CORRIGÉE) ---
 elif menu == "🔍 Recherche & Expertise":
-    st.title("🔬 Recherche & Analyse Comparative")
-    
-    # Vérification si la base contient des données
+    st.title("🔬 Recherche & Analyse de Profil")
     if st.session_state.db_data.empty:
-        st.warning("La base de données est vide. Veuillez ajouter un échantillon dans l'onglet Identification.")
+        st.warning("Aucune donnée disponible. Allez dans 'Identification' d'abord.")
     else:
-        # Sélecteur d'ID
-        liste_ids = st.session_state.db_data["ID"].tolist()
-        id_sel = st.selectbox("🎯 Sélectionner l'échantillon à expertiser :", liste_ids)
+        ids = st.session_state.db_data["ID"].tolist()
+        id_sel = st.selectbox("Sélectionner l'ID", ids)
+        res = st.session_state.db_data[st.session_state.db_data["ID"] == id_sel].iloc[0]
         
-        # Récupération de la ligne spécifique (on enlève les colonnes vides)
-        data_row = st.session_state.db_data[st.session_state.db_data["ID"] == id_sel].dropna(axis=1)
+        st.write("📊 **Valeurs enregistrées :**")
+        st.dataframe(pd.DataFrame(res).T)
         
-        st.write(f"📌 **Métadonnées identifiées pour : {id_sel}**")
-        st.dataframe(data_row)
+        # RADAR CHART SÉCURISÉ
+        st.subheader("🧬 Profil Morphométrique")
+        # On définit les étiquettes dynamiquement pour le graphique aussi !
+        labs = ["Poids/Rend.", "Hauteur", "Thorax/Grains"]
+        vals = [res["Mesure_1"], res["Mesure_2"], res["Mesure_3"]]
+        
+        fig = go.Figure(data=go.Scatterpolar(r=vals, theta=labs, fill='toself'))
+        fig.update_layout(polar=dict(radialaxis=dict(visible=True, range=[0, max(vals)+10])))
+        st.plotly_chart(fig, use_container_width=True)
 
-        # Extraction des colonnes de chiffres uniquement
-        num_cols = data_row.select_dtypes(include=[np.number]).columns.tolist()
-        
-        # --- LOGIQUE DU GRAPHIQUE RADAR ---
-        if len(num_cols) >= 3:
-            st.subheader("🧬 Profil Morphométrique (Radar)")
-            
-            fig = go.Figure()
-            fig.add_trace(go.Scatterpolar(
-                r=data_row[num_cols].values[0],
-                theta=num_cols,
-                fill='toself',
-                name=id_sel,
-                line_color='teal'
-            ))
-            
-            fig.update_layout(
-                polar=dict(radialaxis=dict(visible=True)),
-                showlegend=True,
-                title=f"Bio-Profil de {id_sel}"
-            )
-            st.plotly_chart(fig, use_container_width=True)
-            
-        else:
-            # Si moins de 3 chiffres, on fait un simple diagramme en barres
-            st.info("💡 Note : Pour un graphique Radar, il faut au moins 3 mesures numériques.")
-            if len(num_cols) > 0:
-                st.plotly_chart(px.bar(x=num_cols, y=data_row[num_cols].values[0], 
-                                       title="Visualisation des mesures"), use_container_width=True)
-
-        # --- AFFICHAGE DES OBSERVATIONS TEXTUELLES ---
-        st.markdown("---")
-        st.subheader("📝 Observations Qualitatives")
-        txt_cols = data_row.select_dtypes(include=['object']).columns.tolist()
-        
-        # On affiche tout ce qui n'est pas un identifiant technique
-        for col in txt_cols:
-            if col not in ["ID", "Règne", "Stade", "Date", "Timestamp"]:
-                val = data_row[col].values[0]
-                if val: # N'affiche que si ce n'est pas vide
-                    st.write(f"**{col}** : {val}")
+# --- PAGE 5 : GESTION ---
+elif menu == "🗂️ Gestion de la Base":
+    st.title("🗂️ Système LIMS")
+    edited = st.data_editor(st.session_state.db_data, use_container_width=True, num_rows="dynamic")
+    if st.button("💾 Synchroniser"):
+        st.session_state.db_data = edited
+        st.success("Base synchronisée !")
