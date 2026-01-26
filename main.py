@@ -1,33 +1,36 @@
 import streamlit as st
-
 import pandas as pd
-
-import plotly.express as px
-
-import plotly.graph_objects as go
-
-from datetime import datetime, timedelta
-
 import numpy as np
+from datetime import datetime
+import uuid # Pour générer des identifiants uniques de recherche
 
-import time
+# --- CONFIGURATION SYSTÈME ---
+def pro_init():
+    st.set_page_config(
+        page_title="BioGenExpert v3.0 | LIMS Portal",
+        layout="wide",
+        initial_sidebar_state="expanded"
+    )
 
+    # Initialisation d'une structure de données "Research-Grade"
+    if 'db_data' not in st.session_state:
+        columns = [
+            "Entry_UUID",      # Identifiant unique de la donnée
+            "Timestamp",       # Date et heure précise
+            "Regne",           # Animal ou Végétal
+            "ID_Sujet",        # ID saisi (DZ-...)
+            "Stade_Pheno",     # Stade de développement
+            "M1_Val", "M1_Lab",# Mesure 1 (Valeur et Nom)
+            "M2_Val", "M2_Lab",# Mesure 2
+            "M3_Val", "M3_Lab",# Mesure 3
+            "Quali_1",         # Caractère qualitatif 1
+            "Quali_2",         # Caractère qualitatif 2
+            "Expert_ID"        # Signature du manipulateur
+        ]
+        st.session_state.db_data = pd.DataFrame(columns=columns)
 
-
-# --- CONFIGURATION INTERFACE ---
-
-st.set_page_config(
-
-    page_title="GeneSmart Expert v3.0", 
-
-    layout="wide", 
-
-    page_icon="🧬"
-
-)
-
-
-
+# Appel de l'initialisation
+pro_init()
 # --- INITIALISATION DE LA BASE (Session State) ---
 
 if 'db_data' not in st.session_state:
