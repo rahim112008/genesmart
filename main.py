@@ -124,36 +124,62 @@ elif menu == "🧬 Simulateur de Sélection":
     else:
         st.warning("Il faut au moins deux individus du même règne pour simuler un croisement.")
 
-# --- PAGE 5 : EXPERTISE DYNAMIQUE ---
+# --- PAGE 5 : EXPERTISE DYNAMIQUE (REMPLACEMENT) ---
 elif menu == "🔍 Recherche & Expertise":
-    st.title("🔬 Recherche de Profils")
-    liste_ids = st.session_state.db_data["ID"].tolist()
-    id_sel = st.selectbox("Choisir l'ID :", liste_ids)
+    st.title("🔬 Recherche & Analyse Comparative")
     
-    # Récupération automatique
-    data = st.session_state.db_data[st.session_state.db_data["ID"] == id_sel].dropna(axis=1)
-    st.write("📌 **Données identifiées pour cet échantillon :**")
-    st.dataframe(data)
-    
-    # Graphique dynamique selon les colonnes présentes
-    num_cols = data.select_dtypes(include=[np.number]).columns.tolist()
-    if len(num_cols) >= 2:
-        st.plotly_chart(px.radar(data, r=num_cols[0:3], theta=num_cols[0:3], title="Radar Bio-Morphologique"))
+    # Vérification si la base contient des données
+    if st.session_state.db_data.empty:
+        st.warning("La base de données est vide. Veuillez ajouter un échantillon dans l'onglet Identification.")
+    else:
+        # Sélecteur d'ID
+        liste_ids = st.session_state.db_data["ID"].tolist()
+        id_sel = st.selectbox("🎯 Sélectionner l'échantillon à expertiser :", liste_ids)
+        
+        # Récupération de la ligne spécifique (on enlève les colonnes vides)
+        data_row = st.session_state.db_data[st.session_state.db_data["ID"] == id_sel].dropna(axis=1)
+        
+        st.write(f"📌 **Métadonnées identifiées pour : {id_sel}**")
+        st.dataframe(data_row)
 
-# --- PAGE 6 : GESTION (LIMS) ---
-elif menu == "🗂️ Gestion de la Base":
-    st.title("🗂️ Système de Gestion (LIMS)")
-    st.write("Nettoyage et exportation du Dataset Multi-Taxon.")
-    
-    edited_df = st.data_editor(st.session_state.db_data, num_rows="dynamic", use_container_width=True)
+        # Extraction des colonnes de chiffres uniquement
+        num_cols = data_row.select_dtypes(include=[np.number]).columns.tolist()
+        
+        # --- LOGIQUE DU GRAPHIQUE RADAR ---
+        if len(num_cols) >= 3:
+            st.subheader("🧬 Profil Morphométrique (Radar)")
+            
+            fig = go.Figure()
+            fig.add_trace(go.Scatterpolar(
+                r=data_row[num_cols].values[0],
+                theta=num_cols,
+                fill='toself',
+                name=id_sel,
+                line_color='teal'
+            ))
+            
+            fig.update_layout(
+                polar=dict(radialaxis=dict(visible=True)),
+                showlegend=True,
+                title=f"Bio-Profil de {id_sel}"
+            )
+            st.plotly_chart(fig, use_container_width=True)
+            
+        else:
+            # Si moins de 3 chiffres, on fait un simple diagramme en barres
+            st.info("💡 Note : Pour un graphique Radar, il faut au moins 3 mesures numériques.")
+            if len(num_cols) > 0:
+                st.plotly_chart(px.bar(x=num_cols, y=data_row[num_cols].values[0], 
+                                       title="Visualisation des mesures"), use_container_width=True)
 
-    if st.button("💾 Synchroniser avec le Cloud", type="primary"):
-        progress = st.progress(0)
-        for i in range(101):
-            time.sleep(0.01)
-            progress.progress(i)
-        st.session_state.db_data = edited_df
-        st.success("Synchronisation terminée !")
-
-    csv = st.session_state.db_data.to_csv(index=False).encode('utf-8')
-    st.download_button("📥 Exporter le Dataset (CSV)", csv, "data_export.csv", "text/csv", use_container_width=True)
+        # --- AFFICHAGE DES OBSERVATIONS TEXTUELLES ---
+        st.markdown("---")
+        st.subheader("📝 Observations Qualitatives")
+        txt_cols = data_row.select_dtypes(include=['object']).columns.tolist()
+        
+        # On affiche tout ce qui n'est pas un identifiant technique
+        for col in txt_cols:
+            if col not in ["ID", "Règne", "Stade", "Date", "Timestamp"]:
+                val = data_row[col].values[0]
+                if val: # N'affiche que si ce n'est pas vide
+                    st.write(f"**{col}** : {val}")
