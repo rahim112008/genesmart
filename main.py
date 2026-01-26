@@ -476,28 +476,53 @@ elif menu == "🔍 Recherche GenBank (NCBI)":
 
     # ... (Le reste du code reste le même)
 
-# --- PAGE 6 : GESTION DES DONNÉES ---
-
+# --- PAGE 6 : GESTION DES DONNÉES (LIMS) ---
 elif menu == "🗂️ Gestion de la Base":
-
     st.title("🗂️ Système de Gestion (LIMS)")
+    st.info("Ce module permet la curation des données et la validation des stades physiologiques (Âge).")
 
-    # Éditeur dynamique de données
+    # 1. ÉDITEUR DYNAMIQUE 
+    # L'âge apparaîtra ici comme une colonne modifiable. 
+    # Tu peux même ajouter de nouveaux animaux directement dans le tableau.
+    edited_df = st.data_editor(
+        st.session_state.db_data, 
+        num_rows="dynamic", 
+        use_container_width=True,
+        column_config={
+            "AGE_DENTS": st.column_config.SelectboxColumn(
+                "Stade (Âge)",
+                help="Sélectionnez le stade selon la dentition",
+                options=["Dents de lait", "2 dents", "4 dents", "6 dents", "8 dents"],
+                required=True,
+            )
+        }
+    )
 
-    edited_df = st.data_editor(st.session_state.db_data, num_rows="dynamic", use_container_width=True)
-
-
-
+    # 2. BOUTON DE SYNCHRONISATION
     if st.button("💾 Synchroniser avec le Cloud", type="primary"):
-
         progress = st.progress(0)
-
         for i in range(101):
-
             time.sleep(0.01)
-
             progress.progress(i)
-
         st.session_state.db_data = edited_df
+        st.success("Base de données mise à jour et synchronisée !")
 
-        st.success("Synchronisation terminée !")
+    # 3. RÉSUMÉ POUR LE CHERCHEUR (Nouveau)
+    st.markdown("---")
+    st.subheader("📊 État Civil de la Population")
+    if not st.session_state.db_data.empty:
+        # On compte combien d'animaux par stade d'âge
+        df_age = st.session_state.db_data["AGE_DENTS"].value_counts().reset_index()
+        df_age.columns = ["Stade", "Nombre"]
+        st.plotly_chart(px.pie(df_age, values='Nombre', names='Stade', hole=0.4, 
+                               title="Répartition par classe d'âge"), use_container_width=True)
+    
+    # 4. EXPORTATION CSV
+    csv = st.session_state.db_data.to_csv(index=False).encode('utf-8')
+    st.download_button(
+        label="📥 Exporter le Dataset (Research Format)",
+        data=csv,
+        file_name='genomic_lims_export.csv',
+        mime='text/csv',
+        use_container_width=True
+    )
