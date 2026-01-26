@@ -180,22 +180,57 @@ elif menu == "🧬 Simulateur de Croisement":
             c_res1.metric("Consanguinité F", "1.25%", "🟢 SÉCURISÉ")
             c_res2.metric("Vigueur Hybride", "+15%", "⬆️")
 
-# --- PAGE 5 : GENBANK & BLAST ---
+# --- PAGE 5 : CONSOLE GÉNOMIQUE (VERSION EXPERT BIO-INFO) ---
 elif menu == "🔍 Recherche GenBank (NCBI)":
     st.title("🧬 Diagnostic Génomique & Bio-informatique")
-    id_select = st.selectbox("Échantillon à analyser :", st.session_state.db_data["ID Animal"].tolist())
     
-    gene_name = st.text_input("Gène cible (ex: MSTN, IGF1)", "MSTN")
-    if st.button("🚀 Lancer l'alignement BLAST"):
-        with st.spinner("Comparaison avec les séquences de référence NCBI..."):
-            time.sleep(2)
-            st.code(f"""
-            Query (Indiv_{id_select}):  5' ATGCGTACGGTT 3'
-                                        |||||| ||||||
-            Sbjct (Ref_GenBank):        5' ATGCGTGCGGTT 3'
-                                              ^ (SNP détecté au codon 24)
-            """, language="text")
-            st.warning("SNP (Single Nucleotide Polymorphism) détecté : Impact potentiel sur la croissance.")
+    tab_blast, tab_physico, tab_annot = st.tabs(["🚀 Alignement BLAST", "📊 Profil Physico-Chimique", "🏷️ Annotation Fonctionnelle"])
+
+    with tab_blast:
+        col_l, col_r = st.columns([1, 2])
+        with col_l:
+            gene_name = st.text_input("Gène cible (ex: MSTN, IGF1, CAST, KISS1)", "MSTN")
+            st.info("💡 **MSTN** (Myostatine) : Régulateur de la masse musculaire.")
+            if st.button("🚀 Exécuter BLAST", use_container_width=True):
+                st.session_state.run_blast = True
+        
+        with col_r:
+            if st.session_state.get('run_blast'):
+                with st.spinner("Interrogation des serveurs NCBI..."):
+                    time.sleep(1.5)
+                    st.success("Homologie : 99.8% avec Ovis aries (RefSeq)")
+                    st.code(f"""
+                    Query:  5' ATGCGTACGGTT 3' (Indiv_{id_select})
+                               |||||| ||||||
+                    Sbjct:  5' ATGCGTGCGGTT 3' (Ref_GenBank)
+                                  ^ (SNP détecté au codon 24)
+                    """, language="text")
+                    st.warning("⚠️ SNP G>A : Transition ponctuelle détectée.")
+
+    with tab_physico:
+        st.subheader("🧪 Analyse de la Séquence")
+        seq_test = "ATGCGTACGGTT" # Séquence courte pour l'exemple
+        c1, c2, c3 = st.columns(3)
+        
+        # Calculs réels de bio-info
+        gc_content = (seq_test.count('G') + seq_test.count('C')) / len(seq_test) * 100
+        tm = 64.9 + 41 * (seq_test.count('G') + seq_test.count('C') - 16.4) / len(seq_test) # Formule de Wallace
+        
+        c1.metric("Taux de GC", f"{gc_content:.1f}%")
+        c2.metric("Tm (Temp. Fusion)", f"{tm:.1f} °C")
+        c3.metric("Codon Start", "Présent")
+        
+        # Graphique de répartition des nucléotides
+        st.bar_chart({"A": 3, "T": 3, "G": 3, "C": 3})
+
+    with tab_annot:
+        st.subheader("🏷️ Prédiction de l'effet biologique")
+        st.write("**Impact de la mutation (SNP) :**")
+        st.table({
+            "Paramètre": ["Type de Mutation", "Effet Protéine", "Score SIFT", "Conséquence Phénotypique"],
+            "Valeur": ["Missense", "Arg > Gly", "0.02 (Délétère)", "Augmentation Hypertrophie Musculaire"]
+        })
+        st.info("🔗 [Ouvrir la fiche de ce gène sur Ensembl Genome Browser](https://www.ensembl.org/)")
 
 # --- PAGE 6 : GESTION DES DONNÉES ---
 elif menu == "🗂️ Gestion de la Base":
