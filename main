@@ -1,0 +1,81 @@
+import streamlit as st
+import pandas as pd
+import numpy as np
+from datetime import datetime, timedelta
+from scipy.stats import chi2_contingency
+from sklearn.decomposition import PCA
+import plotly.express as px
+
+# --- CONFIGURATION DE LA PAGE ---
+st.set_page_config(page_title="GeneSmart Pro", page_icon="🧬", layout="wide")
+
+# --- TITRE ET STYLE ---
+st.title("🧬 GeneSmart Pro - Algérie")
+st.markdown("---")
+
+# --- NAVIGATION ---
+menu = ["Tableau de Bord", "Calculs Génétiques", "Analyses Statistiques", "Reproduction"]
+choice = st.sidebar.selectbox("Menu Principal", menu)
+
+# --- LOGIQUE SUPABASE (SIMULÉE POUR LA VITRINE) ---
+# Tes identifiants restent les mêmes dans tes réglages
+SUPABASE_URL = "https://hvqwthiztriskqhfmymg.supabase.co"
+
+# --- SECTION 1 : TABLEAU DE BORD ---
+if choice == "Tableau de Bord":
+    st.header("📊 État du Cheptel")
+    col1, col2, col3 = st.columns(3)
+    col1.metric("Total Individus", "120")
+    col2.metric("Mâles", "20")
+    col3.metric("Femelles", "100")
+    
+    # Petit graphique d'exemple
+    df_data = pd.DataFrame({
+        "Catégorie": ["Béliers", "Brebis", "Agneaux"],
+        "Nombre": [20, 70, 30]
+    })
+    fig = px.pie(df_data, values='Nombre', names='Catégorie', title="Répartition du Troupeau")
+    st.plotly_chart(fig)
+
+# --- SECTION 2 : CALCULS GÉNÉTIQUES ---
+elif choice == "Calculs Génétiques":
+    st.header("🧬 Paramètres de Population")
+    st.subheader("Calcul de la Taille Efficace (Ne)")
+    
+    nm = st.number_input("Nombre de mâles reproducteurs", value=20)
+    nf = st.number_input("Nombre de femelles reproductrices", value=100)
+    
+    if st.button("Calculer Ne"):
+        ne = (4 * nm * nf) / (nm + nf)
+        st.success(f"La taille efficace du troupeau (Ne) est de : {ne:.2f}")
+        if ne < 50:
+            st.warning("⚠️ Attention : Risque de consanguinité élevé selon les normes de Wright.")
+        else:
+            st.info("✅ La diversité génétique est acceptable.")
+
+# --- SECTION 3 : ANALYSES STATISTIQUES ---
+elif choice == "Analyses Statistiques":
+    st.header("🔬 Analyses Avancées")
+    st.write("Calcul de l'Analyse en Composantes Principales (ACP)")
+    
+    # Données fictives pour la démo
+    X = np.array([[65, 80, 25], [60, 75, 22], [70, 85, 28], [62, 78, 24]])
+    pca = PCA(n_components=2)
+    components = pca.fit_transform(X)
+    
+    st.write("Variance expliquée par les axes :", pca.explained_variance_ratio_)
+    st.line_chart(pca.explained_variance_ratio_)
+
+# --- SECTION 4 : REPRODUCTION ---
+elif choice == "Reproduction":
+    st.header("📅 Gestion de la Reproduction")
+    date_pose = st.date_input("Date de pose de l'éponge", datetime.now())
+    
+    # Calcul des étapes (14 jours éponge + 2 jours attente + 150 jours gestation)
+    date_retrait = date_pose + timedelta(days=14)
+    date_lutte = date_retrait + timedelta(days=2)
+    date_mise_bas = date_lutte + timedelta(days=150)
+    
+    st.info(f"📅 Retrait éponge : {date_retrait}")
+    st.info(f"🐏 Date de lutte (IA) : {date_lutte}")
+    st.success(f"🐑 Mise-bas estimée : {date_mise_bas}")
