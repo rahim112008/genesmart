@@ -180,58 +180,79 @@ elif menu == "🧬 Simulateur de Croisement":
             c_res1.metric("Consanguinité F", "1.25%", "🟢 SÉCURISÉ")
             c_res2.metric("Vigueur Hybride", "+15%", "⬆️")
 
-# --- PAGE 5 : CONSOLE GÉNOMIQUE (VERSION EXPERT BIO-INFO) ---
+# --- PAGE 5 : EXPERTISE & PRÉDICTION GÉNOTYPIQUE ---
 elif menu == "🔍 Recherche GenBank (NCBI)":
-    st.title("🧬 Diagnostic Génomique & Bio-informatique")
+    st.title("🔬 Expertise Phénomique & Prédiction")
     
-    tab_blast, tab_physico, tab_annot = st.tabs(["🚀 Alignement BLAST", "📊 Profil Physico-Chimique", "🏷️ Annotation Fonctionnelle"])
+    # Récupération des données de l'animal pour les calculs
+    try:
+        poids_actuel = v1
+        ht_garrot = v2
+        tp = v5  # Périmètre thoracique
+        lg_corps = v4
+        largeur_poitrine = v7
+    except:
+        st.error("Veuillez d'abord saisir les données dans l'onglet Identification.")
+        st.stop()
 
-    with tab_blast:
-        col_l, col_r = st.columns([1, 2])
-        with col_l:
-            gene_name = st.text_input("Gène cible (ex: MSTN, IGF1, CAST, KISS1)", "MSTN")
-            st.info("💡 **MSTN** (Myostatine) : Régulateur de la masse musculaire.")
-            if st.button("🚀 Exécuter BLAST", use_container_width=True):
-                st.session_state.run_blast = True
-        
-        with col_r:
-            if st.session_state.get('run_blast'):
-                with st.spinner("Interrogation des serveurs NCBI..."):
-                    time.sleep(1.5)
-                    st.success("Homologie : 99.8% avec Ovis aries (RefSeq)")
-                    st.code(f"""
-                    Query:  5' ATGCGTACGGTT 3' (Indiv_{id_select})
-                               |||||| ||||||
-                    Sbjct:  5' ATGCGTGCGGTT 3' (Ref_GenBank)
-                                  ^ (SNP détecté au codon 24)
-                    """, language="text")
-                    st.warning("⚠️ SNP G>A : Transition ponctuelle détectée.")
+    tab_index, tab_predict, tab_trans = st.tabs(["📊 Index Zootechniques", "🔮 Prédiction Génotype", "🧬 Transmission Estimée"])
 
-    with tab_physico:
-        st.subheader("🧪 Analyse de la Séquence")
-        seq_test = "ATGCGTACGGTT" # Séquence courte pour l'exemple
-        c1, c2, c3 = st.columns(3)
+    with tab_index:
+        st.subheader("📈 Confirmation par Index Morphométriques")
+        col1, col2, col3 = st.columns(3)
         
-        # Calculs réels de bio-info
-        gc_content = (seq_test.count('G') + seq_test.count('C')) / len(seq_test) * 100
-        tm = 64.9 + 41 * (seq_test.count('G') + seq_test.count('C') - 16.4) / len(seq_test) # Formule de Wallace
+        # Formules scientifiques de biométrie ovine
+        it = (tp / ht_garrot) # Indice Thoracique
+        ic = (ht_garrot / lg_corps) # Indice de Compacité
+        id_rel = (largeur_poitrine / ht_garrot) * 100 # Indice de d'Élargissement
         
-        c1.metric("Taux de GC", f"{gc_content:.1f}%")
-        c2.metric("Tm (Temp. Fusion)", f"{tm:.1f} °C")
-        c3.metric("Codon Start", "Présent")
-        
-        # Graphique de répartition des nucléotides
-        st.bar_chart({"A": 3, "T": 3, "G": 3, "C": 3})
+        col1.metric("Indice Thoracique", f"{it:.2f}", help="Standard Ouled Djellal : ~1.20")
+        col2.metric("Compacité", f"{ic:.2f}", help="Aptitude bouchère")
+        col3.metric("Élargissement", f"{id_rel:.1f}%")
 
-    with tab_annot:
-        st.subheader("🏷️ Prédiction de l'effet biologique")
-        st.write("**Impact de la mutation (SNP) :**")
-        st.table({
-            "Paramètre": ["Type de Mutation", "Effet Protéine", "Score SIFT", "Conséquence Phénotypique"],
-            "Valeur": ["Missense", "Arg > Gly", "0.02 (Délétère)", "Augmentation Hypertrophie Musculaire"]
-        })
-        st.info("🔗 [Ouvrir la fiche de ce gène sur Ensembl Genome Browser](https://www.ensembl.org/)")
+        # Graphique de conformité
+        standards = [1.20, 0.90, 35.0]
+        actuels = [it, ic, id_rel / 100 if id_rel < 100 else 1.0] # Normalisation pour le graphe
+        fig_comp = go.Figure()
+        fig_comp.add_trace(go.Bar(name='Individu', x=['Thorax', 'Compacité', 'Largeur'], y=actuels))
+        fig_comp.add_trace(go.Scatter(name='Standard Race', x=['Thorax', 'Compacité', 'Largeur'], y=[1.20, 0.90, 0.38], mode='lines+markers'))
+        st.plotly_chart(fig_comp, use_container_width=True)
+        
 
+    with tab_predict:
+        st.subheader("🔮 Inférence du Génotype (Inférence Phénotypique)")
+        st.write("D'après les corrélations phénotype-génotype observées :")
+        
+        predictions = []
+        
+        # Logique de prédiction basée sur tes 30 caractères
+        if q7 == "Absentes (Mottes)":
+            predictions.append({"Locus": "Gène des Cornes (P)", "Génotype Prédit": "P/P (Homozygote dominant)", "Probabilité": "95%", "Note": "Caractère monogénique direct"})
+        
+        if id_rel > 38 or largeur_poitrine > 30:
+            predictions.append({"Locus": "Myostatine (MSTN)", "Génotype Prédit": "Hétérozygote (Mutation +)", "Probabilité": "70%", "Note": "Lien fort avec l'hypertrophie"})
+        
+        if q1 == "Blanc pur":
+            predictions.append({"Locus": "Agouti (A)", "Génotype Prédit": "Awt/Awt", "Probabilité": "99%", "Note": "Pureté raciale confirmée"})
+
+        if predictions:
+            st.table(predictions)
+            st.info("💡 Cette prédiction se base sur l'expression phénotypique des gènes à effet majeur.")
+        else:
+            st.warning("Pas assez de données distinctives pour prédire un locus spécifique.")
+        
+
+    with tab_trans:
+        st.subheader("🧬 Potentiel de Transmission (Héritabilité)")
+        # L'héritabilité (h2) est la part du phénotype due aux gènes
+        h2_poids = 0.35 
+        gain_estime = h2_poids * (poids_actuel - 50.0) # 50kg = moyenne race
+        
+        st.write(f"Si cet individu est utilisé comme reproducteur :")
+        st.metric("Supériorité Génétique Transmissible", f"{gain_estime:+.2f} kg", delta_color="normal")
+        
+        st.progress(min(max(h2_poids, 0.0), 1.0))
+        st.caption(f"Héritabilité estimée pour la croissance : {h2_poids*100}%")
 # --- PAGE 6 : GESTION DES DONNÉES ---
 elif menu == "🗂️ Gestion de la Base":
     st.title("🗂️ Système de Gestion (LIMS)")
