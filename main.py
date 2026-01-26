@@ -65,38 +65,38 @@ elif menu == "🆔 Identification Dynamique":
         stade = c2.text_input("Stade (Âge / BBCH / Dentition)", "2 dents" if regne == "Animal" else "Tallage")
 
         st.markdown("---")
-        # --- BLOC QUANTITATIF ---
-        st.subheader("📏 Mesures Quantitatives (Biométrie)")
-        cq1, cq2, cq3 = st.columns(3)
-        label_q1 = cq1.text_input("Nom Caractère 1", "Poids (kg)" if regne == "Animal" else "Rendement (q/ha)")
-        val_q1 = cq1.number_input("Valeur 1", value=0.0)
-        
-        label_q2 = cq2.text_input("Nom Caractère 2", "Hauteur (cm)" if regne == "Animal" else "Hauteur Tige (cm)")
-        val_q2 = cq2.number_input("Valeur 2", value=0.0)
-        
-        label_q3 = cq3.text_input("Nom Caractère 3", "Périmètre (cm)" if regne == "Animal" else "Nombre Grains")
-        val_q3 = cq3.number_input("Valeur 3", value=0.0)
+        # --- SECTION QUANTITATIVE (CHIFFRES) ---
+st.subheader("📏 Paramètres Biométriques (Quantitatifs)")
+cq1, cq2, cq3 = st.columns(3)
 
-        st.markdown("---")
-        # --- BLOC QUALITATIF ---
-        st.subheader("🎨 Caractères Qualitatifs (Observations)")
-        cql1, cql2 = st.columns(2)
-        label_ql1 = cql1.text_input("Descripteur 1", "Couleur" if regne == "Animal" else "Forme Feuille")
-        val_ql1 = cql1.text_input("Observation 1")
-        
-        label_ql2 = cql2.text_input("Descripteur 2", "Cornes" if regne == "Animal" else "Résistance")
-        val_ql2 = cql2.text_input("Observation 2")
+# On définit les étiquettes par défaut selon le règne choisi
+default_q1 = "Poids (kg)" if regne == "Élevage (Animal)" else "Rendement (q/ha)"
+default_q2 = "Hauteur Garrot (cm)" if regne == "Élevage (Animal)" else "Hauteur Tige (cm)"
+default_q3 = "Périmètre Thoracique (cm)" if regne == "Élevage (Animal)" else "Nombre Grains"
 
-        if st.form_submit_button("💾 Enregistrer dans la Base Universelle", use_container_width=True, type="primary"):
-            new_row = {
-                "ID": id_sujet, "Règne": regne, "Stade": stade,
-                label_q1: val_q1, label_q2: val_q2, label_q3: val_q3,
-                label_ql1: val_ql1, label_ql2: val_ql2,
-                "Date": datetime.now().strftime("%d/%m/%Y")
-            }
-            st.session_state.db_data = pd.concat([st.session_state.db_data, pd.DataFrame([new_row])], ignore_index=True)
-            st.success(f"Enregistrement réussi pour {id_sujet}")
-            st.balloons()
+label_q1 = cq1.text_input("Nom Caractère 1", value=default_q1)
+val_q1 = cq1.number_input("Valeur 1", value=0.0, key="val1")
+
+label_q2 = cq2.text_input("Nom Caractère 2", value=default_q2)
+val_q2 = cq2.number_input("Valeur 2", value=0.0, key="val2")
+
+label_q3 = cq3.text_input("Nom Caractère 3", value=default_q3)
+val_q3 = cq3.number_input("Valeur 3", value=0.0, key="val3")
+
+st.markdown("---")
+
+# --- SECTION QUALITATIVE (TEXTE) ---
+st.subheader("🎨 Caractères Morphologiques (Qualitatifs)")
+cql1, cql2 = st.columns(2)
+
+default_ql1 = "Couleur Robe" if regne == "Élevage (Animal)" else "Forme Feuille"
+default_ql2 = "Présence Cornes" if regne == "Élevage (Animal)" else "Type Fruit/Inflorescence"
+
+label_ql1 = cql1.text_input("Descripteur 1", value=default_ql1)
+val_ql1 = cql1.text_input("Observation 1", key="obs1")
+
+label_ql2 = cql2.text_input("Descripteur 2", value=default_ql2)
+val_ql2 = cql2.text_input("Observation 2", key="obs2")
 
 # --- PAGE 3 : SUIVI & REPRO ---
 elif menu == "💉 Suivi & Reproduction":
