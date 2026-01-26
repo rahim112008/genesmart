@@ -68,44 +68,61 @@ if menu == "📊 Tableau de Bord":
                                title="Effet de l'Environnement sur le Poids"), use_container_width=True)
         st.info("Résultat : F=14.2, p-value=0.0024 (Différence significative entre régions)")
 
-# --- PAGE 2 : CARACTÉRISATION PHÉNOTYPIQUE ---
+# --- PAGE 2 : IDENTIFICATION (LES 30 CARACTÈRES DÉTAILLÉS) ---
 elif menu == "🆔 Identification (30 Car.)":
     st.title("🆔 Caractérisation Phénotypique Complète")
+    st.info("Saisie des 30 descripteurs morphologiques (Standards FAO/UPOV)")
+
     id_an = st.text_input("Identifiant Unique de l'animal", "DZ-2026-001")
     
-    tab1, tab2, tab3 = st.tabs(["📏 15 Mesures Quantitatives", "🎨 15 Traits Qualitatifs", "📈 Profil Radar"])
-    
-    with tab1:
-        c1, c2, c3 = st.columns(3)
-        with c1:
-            v1 = st.number_input("Poids (kg)", 45.0); v2 = st.number_input("Hauteur Garrot", 75.0)
-            v3 = st.number_input("Hauteur Croupe", 74.0); v5 = st.number_input("Long. Corps", 82.0)
-        with c2:
-            v6 = st.number_input("Tour Poitrine", 92.0); v7 = st.number_input("Larg. Poitrine", 28.0)
-            v9 = st.number_input("Larg. Trochanters", 22.0); v10 = st.number_input("Tour Canon", 10.5)
-        with c3:
-            v11 = st.number_input("Long. Tête", 25.0); v13 = st.number_input("Long. Oreilles", 18.0)
-            v14 = st.number_input("Long. Cornes", 15.0); v15 = st.number_input("Long. Queue", 30.0)
+    # Séparation en deux blocs distincts pour bien montrer les 30 caractères
+    col_quant, col_qual = st.columns(2)
 
-    with tab2:
-        c4, c5, c6 = st.columns(3)
-        with c4:
-            st.selectbox("Robe", ["Blanc", "Noir", "Fauve"]); st.selectbox("Laine", ["Lisse", "Frisé"])
-        with c5:
-            st.selectbox("Profil tête", ["Droit", "Busqué"]); st.selectbox("Cornes", ["Spirales", "Absentes"])
-        with c6:
-            st.selectbox("Croupe", ["Horizontale", "Avalée"]); st.selectbox("Aplombs", ["Corrects", "Défectueux"])
+    with col_quant:
+        st.subheader("📏 15 Caractères Quantitatifs (Mesures)")
+        # --- MESURES CORPORELLES ---
+        v1 = st.number_input("1. Poids vif (kg)", 20.0, 120.0, 45.0)
+        v2 = st.number_input("2. Hauteur au garrot (cm)", 40.0, 100.0, 75.0)
+        v3 = st.number_input("3. Hauteur à la croupe (cm)", 40.0, 100.0, 74.0)
+        v4 = st.number_input("4. Longueur du corps (cm)", 40.0, 120.0, 82.0)
+        v5 = st.number_input("5. Périmètre thoracique (cm)", 50.0, 130.0, 92.0)
+        v6 = st.number_input("6. Largeur de la poitrine (cm)", 15.0, 40.0, 28.0)
+        v7 = st.number_input("7. Largeur aux hanches (cm)", 15.0, 35.0, 24.0)
+        v8 = st.number_input("8. Largeur aux trochanters (cm)", 15.0, 35.0, 22.0)
+        # --- TÊTE ET EXTRÉMITÉS ---
+        v9 = st.number_input("9. Longueur de la tête (cm)", 15.0, 35.0, 25.0)
+        v10 = st.number_input("10. Largeur du front (cm)", 5.0, 20.0, 12.0)
+        v11 = st.number_input("11. Longueur des oreilles (cm)", 5.0, 30.0, 18.0)
+        v12 = st.number_input("12. Longueur des cornes (cm)", 0.0, 50.0, 15.0)
+        v13 = st.number_input("13. Tour du canon (cm)", 5.0, 15.0, 10.5)
+        v14 = st.number_input("14. Longueur de la queue (cm)", 10.0, 50.0, 30.0)
+        v15 = st.number_input("15. Profondeur de poitrine (cm)", 20.0, 50.0, 35.0)
 
-    with tab3:
-        # Visualisation Radar (Trés important pour la biométrie)
-        fig = go.Figure()
-        fig.add_trace(go.Scatterpolar(r=[v1, v2, v6, v5, v9], theta=["Poids", "Garrot", "Poitrine", "Corps", "Bassin"], fill='toself', name="Individu"))
-        fig.add_trace(go.Scatterpolar(r=[50, 72, 88, 80, 22], theta=["Poids", "Garrot", "Poitrine", "Corps", "Bassin"], fill='toself', name="Standard Race"))
-        st.plotly_chart(fig, use_container_width=True)
-        
-        
-        if st.button("📥 Sauvegarder l'Animal dans la Base", use_container_width=True):
-            st.success(f"Données de l'animal {id_an} enregistrées !")
+    with col_qual:
+        st.subheader("🎨 15 Caractères Qualitatifs (Visuels)")
+        # --- ASPECT GÉNÉRAL ---
+        q1 = st.selectbox("16. Couleur de la robe", ["Blanc pur", "Noir", "Fauve", "Pie-rouge"])
+        q2 = st.selectbox("17. Type de laine", ["Mèche longue", "Mèche courte", "Lisse", "Jarreuse"])
+        q3 = st.selectbox("18. Couverture de laine", ["Totale", "Ventre nu", "Tête et pattes nues"])
+        q4 = st.selectbox("19. Pigmentation muqueuses", ["Rose", "Noire", "Tachetée"])
+        # --- TÊTE ---
+        q5 = st.selectbox("20. Profil de la tête", ["Droit", "Busqué (Bélier)", "Ultra-busqué"])
+        q6 = st.selectbox("21. Port des oreilles", ["Tombantes", "Semi-tombantes", "Dressées"])
+        q7 = st.selectbox("22. Présence de cornes", ["Spiralées", "Rudimentaires", "Absentes (Mottes)"])
+        q8 = st.selectbox("23. Forme des cornes", ["Prismatiques", "Rondes", "Néant"])
+        # --- CORPS ---
+        q9 = st.selectbox("24. Type de queue", ["Fine", "Grasse (base)", "Semi-grasse"])
+        q10 = st.selectbox("25. Ligne de dos", ["Droite", "Ensellée", "Voûtée"])
+        q11 = st.selectbox("26. Inclinaison croupe", ["Horizontale", "Inclinée (Avalée)"])
+        q12 = st.selectbox("27. Aplombs antérieurs", ["Corrects", "Panards", "Cagneux"])
+        q13 = st.selectbox("28. Aplombs postérieurs", ["Corrects", "Crochus", "Ouverts"])
+        q14 = st.selectbox("29. Développement fanon", ["Absent", "Réduit", "Marqué"])
+        q15 = st.selectbox("30. État des trayons/scrotum", ["Normal", "Asymétrique", "Anomalie"])
+
+    st.markdown("---")
+    if st.button("💾 Enregistrer la caractérisation complète (30/30)", use_container_width=True, type="primary"):
+        st.balloons()
+        st.success(f"L'animal {id_an} a été caractérisé avec succès selon les standards phénotypiques.")
 
 # --- PAGE 3 : SUIVI & REPRODUCTION (CORRIGÉ) ---
 elif menu == "💉 Suivi & Reproduction":
