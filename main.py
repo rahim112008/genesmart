@@ -71,10 +71,27 @@ elif menu == "🆔 Identification Dynamique":
 
 # --- PAGE 3 : SUIVI & REPRODUCTION ---
 elif menu == "💉 Suivi & Reproduction":
-    st.title("💉 Gestion du Cycle")
-    date_ref = st.date_input("Date de référence (Semis ou Pose Éponge)", datetime.now())
-    jours = 150 if "Animal" in regne_choice else 120
-    st.warning(f"Échéance prévue (Mise bas ou Récolte) : {(date_ref + timedelta(days=jours)).strftime('%d/%m/%Y')}")
+    # Le titre change selon le domaine choisi
+    titre_cycle = "💉 Gestion du Cycle (Reproduction)" if "Animal" in regne_choice else "🌱 Gestion du Cycle (Croissance)"
+    st.title(titre_cycle)
+    
+    # Texte d'instruction dynamique
+    label_date = "Date de Pose Éponge (Brebis)" if "Animal" in regne_choice else "Date de Semis (Plante)"
+    date_ref = st.date_input(label_date, datetime.now())
+    
+    # CALCUL DYNAMIQUE : 150 jours pour l'animal, 120 pour la plante
+    jours_cycle = 150 if "Animal" in regne_choice else 120
+    date_echeance = date_ref + timedelta(days=jours_cycle)
+    
+    # Affichage du résultat avec un libellé adapté
+    label_echeance = "🐣 Date de Mise bas prévue" if "Animal" in regne_choice else "🚜 Date de Récolte prévue"
+    
+    st.warning(f"{label_echeance} : {date_echeance.strftime('%d/%m/%Y')}")
+    
+    # Indicateur visuel du temps restant
+    jours_restants = (date_echeance - datetime.now().date()).days
+    if jours_restants > 0:
+        st.info(f"⏳ Temps restant estimé : **{jours_restants} jours**")
 
 # --- PAGE 4 : RECHERCHE & EXPERTISE (CORRIGÉE) ---
 elif menu == "🔍 Recherche & Expertise":
