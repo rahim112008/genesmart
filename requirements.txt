@@ -1,6 +1,8 @@
 streamlit
 pandas
 numpy
+httpx
 scipy
+statsmodels
 scikit-learn
 plotly
