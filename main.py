@@ -107,6 +107,42 @@ elif menu == "🆔 Identification (30 Car.)":
         if st.button("📥 Sauvegarder l'Animal dans la Base", use_container_width=True):
             st.success(f"Données de l'animal {id_an} enregistrées !")
 
+# --- PAGE 3 : SUIVI & REPRODUCTION (CORRIGÉ) ---
+elif menu == "💉 Suivi & Reproduction":
+    st.title("💉 Gestion Sanitaire & Reproduction")
+    
+    col_v, col_r = st.columns(2)
+    
+    with col_v:
+        st.subheader("📝 Acte Médical")
+        with st.form("vet_form"):
+            animal_id_vet = st.text_input("ID Animal", "DZ-2026-")
+            acte = st.selectbox("Type d'acte", ["Vaccin", "Déparasitage", "Pose Éponge", "Traitement Curatif"])
+            etat = st.select_slider("État de santé général", options=["Mauvais", "Moyen", "Bon", "Parfait"])
+            note = st.text_area("Observations")
+            
+            submit_vet = st.form_submit_button("Enregistrer l'acte")
+            if submit_vet:
+                st.success(f"L'acte '{acte}' pour l'animal {animal_id_vet} a été enregistré.")
+
+    with col_r:
+        st.subheader("🤰 Prédiction Mise Bas")
+        st.write("Calculez les dates clés du cycle de reproduction.")
+        date_e = st.date_input("Date de Pose de l'Éponge", datetime.now())
+        
+        if date_e:
+            date_retrait = date_e + timedelta(days=14)
+            date_lutte = date_retrait + timedelta(days=2)
+            date_mise_bas = date_lutte + timedelta(days=150)
+            
+            st.info(f"📅 **Retrait de l'éponge :** {date_retrait.strftime('%d/%m/%Y')}")
+            st.info(f"🐑 **Date de lutte prévue :** {date_lutte.strftime('%d/%m/%Y')}")
+            st.warning(f"🐣 **Mise bas prévue (± 5j) :** {date_mise_bas.strftime('%d/%m/%Y')}")
+            
+            jours_restants = (date_mise_bas - datetime.now().date()).days
+            if jours_restants > 0:
+                st.write(f"Il reste environ **{jours_restants} jours** avant la mise bas.")
+
 # --- PAGE 4 : CROISEMENT ---
 elif menu == "🧬 Simulateur de Croisement":
     st.title("🧬 Simulateur Expert de Croisement")
