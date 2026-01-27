@@ -8,11 +8,27 @@ from datetime import datetime, timedelta
 # --- 1. CONFIGURATION DE LA PAGE ---
 st.set_page_config(page_title="BioGenExpert v10.0 | Ultimate Edition", layout="wide", page_icon="🧬")
 
-# --- 2. INITIALISATION DU SESSION STATE (LIMS) ---
-if 'db_data' not in st.session_state:
-    # Création d'une structure vide avec 30 caractères + méta-données
+# --- 2. INITIALISATION DU SESSION STATE (AVEC DONNÉES DE DÉMO) ---
+if 'db_data' not in st.session_state or st.session_state.db_data.empty:
     cols = ["ID", "Age", "GMQ", "Date", "Score_Genotype"] + [f"V{i}" for i in range(1, 16)] + [f"Q{i}" for i in range(16, 31)]
-    st.session_state.db_data = pd.DataFrame(columns=cols)
+    
+    # Création de 2 animaux de démonstration pour que les graphiques s'affichent direct
+    demo_data = [
+        {
+            "ID": "DZ-ELITE-001", "Age": 18, "GMQ": 285.5, "Date": "2024-05-20",
+            "V1": 65.0, "V2": 78.0, "V3": 76.0, "V4": 85.0, "V5": 98.0, "Q16": "Blanc", "Q17": "Mèche longue"
+        },
+        {
+            "ID": "DZ-STD-002", "Age": 12, "GMQ": 145.2, "Date": "2024-05-20",
+            "V1": 42.0, "V2": 70.0, "V3": 68.0, "V4": 78.0, "V5": 88.0, "Q16": "Fauve", "Q17": "Lisse"
+        }
+    ]
+    # Remplissage automatique des autres colonnes V6-V15 et Q18-Q30 pour éviter les erreurs
+    for d in demo_data:
+        for i in range(6, 16): d[f"V{i}"] = 15.0
+        for i in range(18, 31): d[f"Q{i}"] = "Standard"
+        
+    st.session_state.db_data = pd.DataFrame(demo_data)
 
 # --- 3. BARRE LATÉRALE ---
 st.sidebar.title("🧬 BioGen Analytics Pro")
