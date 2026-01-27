@@ -3,385 +3,148 @@ import pandas as pd
 import numpy as np
 import plotly.express as px
 import plotly.graph_objects as go
-from datetime import datetime, timedelta
+from datetime import datetime
 
-# --- 1. CONFIGURATION DE LA PAGE ---
-st.set_page_config(page_title="BioGenExpert v10.0 | Ultimate Edition", layout="wide", page_icon="🧬")
+# --- 1. CONFIGURATION & DICTIONNAIRE SCIENTIFIQUE ---
+st.set_page_config(page_title="BioGenExpert Pro v10.0", layout="wide", page_icon="🧬")
 
-# --- 2. INITIALISATION DU SESSION STATE (AVEC DONNÉES DE DÉMO) ---
-if 'db_data' not in st.session_state or st.session_state.db_data.empty:
-    cols = ["ID", "Age", "GMQ", "Date", "Score_Genotype"] + [f"V{i}" for i in range(1, 16)] + [f"Q{i}" for i in range(16, 31)]
-    
-    # Création de 2 animaux de démonstration pour que les graphiques s'affichent direct
-    demo_data = [
-        {
-            "ID": "DZ-ELITE-001", "Age": 18, "GMQ": 285.5, "Date": "2024-05-20",
-            "V1": 65.0, "V2": 78.0, "V3": 76.0, "V4": 85.0, "V5": 98.0, "Q16": "Blanc", "Q17": "Mèche longue"
-        },
-        {
-            "ID": "DZ-STD-002", "Age": 12, "GMQ": 145.2, "Date": "2024-05-20",
-            "V1": 42.0, "V2": 70.0, "V3": 68.0, "V4": 78.0, "V5": 88.0, "Q16": "Fauve", "Q17": "Lisse"
-        }
-    ]
-    # Remplissage automatique des autres colonnes V6-V15 et Q18-Q30 pour éviter les erreurs
-    for d in demo_data:
-        for i in range(6, 16): d[f"V{i}"] = 15.0
-        for i in range(18, 31): d[f"Q{i}"] = "Standard"
-        
-    st.session_state.db_data = pd.DataFrame(demo_data)
+# Dictionnaire centralisé pour transformer V1, Q16 en noms clairs
+LABEL_MAP = {
+    "ID": "Identifiant Animal", "Age": "Âge (mois)", "GMQ": "Gain Moyen Quotidien (g/j)", "Date": "Date Collecte",
+    "V1": "Poids Vif (kg)", "V2": "Hauteur au Garrot (cm)", "V3": "Hauteur à la Croupe (cm)", "V4": "Longueur du Corps (cm)",
+    "V5": "Périmètre Thoracique (cm)", "V6": "Largeur Poitrine (cm)", "V7": "Profondeur Poitrine (cm)", "V8": "Largeur Hanches (cm)",
+    "V9": "Largeur Trochanters (cm)", "V10": "Longueur Croupe (cm)", "V11": "Périmètre Canon (cm)", "V12": "Longueur Tête (cm)",
+    "V13": "Largeur Tête (cm)", "V14": "Longueur Oreilles (cm)", "V15": "Longueur Cornes (cm)",
+    "Q16": "Couleur Robe", "Q17": "Type Toison", "Q18": "Profil Tête", "Q19": "Forme Cornes", "Q20": "Position Oreilles",
+    "Q21": "Pendeloques", "Q22": "Pigmentation Peau", "Q23": "Type Queue", "Q24": "Présence Cornes", "Q25": "État Santé",
+    "Q26": "Conformation Pis", "Q27": "Tempérament", "Q28": "Structure Sabots", "Q29": "Localisation", "Q30": "Système Élevage"
+}
+
+# --- 2. INITIALISATION DU SESSION STATE ---
+if 'db_data' not in st.session_state:
+    cols = list(LABEL_MAP.keys())
+    st.session_state.db_data = pd.DataFrame(columns=cols)
+    # Ajout d'une ligne de démo pour éviter les erreurs d'affichage au départ
+    demo = {"ID": "DEMO-01", "Age": 12, "GMQ": 250.0, "Date": datetime.now().date(), "V1": 45.0, "V2": 75.0, "V3": 74.0, "V4": 82.0, "V5": 92.0}
+    for i in range(6, 16): demo[f"V{i}"] = 15.0
+    for i in range(16, 31): demo[f"Q{i}"] = "Standard"
+    st.session_state.db_data = pd.DataFrame([demo])
 
 # --- 3. BARRE LATÉRALE ---
 st.sidebar.title("🧬 BioGen Analytics Pro")
 menu = st.sidebar.radio("Navigation Pipeline", [
-    "🆔 Caractérisation (30 Car.)", 
+    "🆔 Caractérisation (Saisie)", 
     "📊 Statistiques Multivariées", 
     "🔮 Prédiction & GeneBank",
     "🔀 Simulation de Croisement",
     "📊 Base de Données & Export"
 ])
 
-# --- 4. PAGE 1 : IDENTIFICATION (SAISIE) ---
-if menu == "🆔 Caractérisation (30 Car.)":
-    st.title("🆔 Identification et Phénotypage Haut-Débit")
-    
+# --- 4. PAGE 1 : CARACTÉRISATION ---
+if menu == "🆔 Caractérisation (Saisie)":
+    st.title("🆔 Identification et Phénotypage")
     with st.form("main_form"):
-        c_h1, c_h2 = st.columns([2, 1])
-        id_an = c_h1.text_input("Identifiant Unique de l'animal", "DZ-2026-")
-        age_an = c_h2.number_input("Âge de l'animal (mois)", min_value=1, value=12)
+        c1, c2 = st.columns(2)
+        id_an = c1.text_input("Identifiant Unique", "DZ-2026-")
+        age_an = c2.number_input("Âge (mois)", min_value=1, value=12)
 
         col_quant, col_qual = st.columns(2)
         with col_quant:
-            st.subheader("📏 15 Caractères Quantitatifs")
-            v1 = st.number_input("1. Poids vif (kg)", 5.0, 150.0, 45.0)
-            v2 = st.number_input("2. Hauteur au garrot (cm)", 30.0, 110.0, 75.0)
-            v3 = st.number_input("3. Hauteur à la croupe (cm)", 30.0, 110.0, 74.0)
-            v4 = st.number_input("4. Longueur du corps (cm)", 30.0, 130.0, 82.0)
-            v5 = st.number_input("5. Périmètre thoracique (cm)", 40.0, 150.0, 92.0)
-            v_others = [st.number_input(f"{i}. Mesure (cm)", value=15.0) for i in range(6, 16)]
-            v_all = [v1, v2, v3, v4, v5] + v_others
-
+            st.subheader("📏 Mesures (V1-V15)")
+            v_vals = [st.number_input(LABEL_MAP[f"V{i}"], value=15.0 if i > 1 else 45.0) for i in range(1, 16)]
         with col_qual:
-            st.subheader("🎨 15 Caractères Qualitatifs")
-            q16 = st.selectbox("16. Couleur robe", ["Blanc", "Noir", "Fauve", "Pie-rouge"])
-            q17 = st.selectbox("17. Type laine", ["Mèche longue", "Mèche courte", "Lisse"])
-            q_others = [st.selectbox(f"{i}. Caractère Visuel", ["Type A", "Type B", "Type C"]) for i in range(18, 31)]
-            q_all = [q16, q17] + q_others
+            st.subheader("🎨 Observations (Q16-Q30)")
+            q_vals = [st.selectbox(LABEL_MAP[f"Q{i}"], ["Type A", "Type B", "Type C"]) for i in range(16, 31)]
 
-        if st.form_submit_button("💾 Enregistrer & Lancer l'Analyse"):
-            # Calcul GMQ
-            jours = age_an * 30.44
-            gmq = (v1 - 4.0) / jours * 1000
-            
-            # Sauvegarde
-            new_entry = {"ID": id_an, "Age": age_an, "GMQ": round(gmq, 2), "Date": datetime.now().date()}
-            for i, v in enumerate(v_all): new_entry[f"V{i+1}"] = v
-            for i, q in enumerate(q_all): new_entry[f"Q{i+16}"] = q
-            
+        if st.form_submit_button("💾 Enregistrer"):
+            gmq = round((v_vals[0] - 4.0) / (age_an * 30.44) * 1000, 2)
+            new_entry = {"ID": id_an, "Age": age_an, "GMQ": gmq, "Date": datetime.now().date()}
+            for i, v in enumerate(v_vals): new_entry[f"V{i+1}"] = v
+            for i, q in enumerate(q_vals): new_entry[f"Q{i+16}"] = q
             st.session_state.db_data = pd.concat([st.session_state.db_data, pd.DataFrame([new_entry])], ignore_index=True)
-            st.success("Données archivées avec succès.")
-            st.balloons()
+            st.success("Données enregistrées !")
 
-# --- 5. PAGE 2 : STATISTIQUES MULTIVARIÉES (VERSION DYNAMIQUE) ---
+# --- 5. PAGE 2 : STATISTIQUES DYNAMIQUES ---
 elif menu == "📊 Statistiques Multivariées":
-    st.title("📊 Moteur d'Analyse Bio-Statistique")
-    
-    # Vérification si la base contient assez de données
-    if len(st.session_state.db_data) < 2:
-        st.warning("⚠️ Base de données insuffisante. Veuillez saisir ou importer au moins 2 individus.")
+    st.title("📊 Analyses Statistiques")
+    df = st.session_state.db_data
+    if len(df) < 2:
+        st.warning("Veuillez saisir au moins 2 individus.")
     else:
-        df = st.session_state.db_data
-        
-        # Séparation automatique des colonnes numériques et qualitatives
         num_cols = df.select_dtypes(include=[np.number]).columns.tolist()
         cat_cols = df.select_dtypes(exclude=[np.number]).columns.tolist()
-
-        tab1, tab2, tab3 = st.tabs(["📉 ACP & Clusters", "🧪 ANOVA One-Way", "🔗 Corrélations"])
+        
+        tab1, tab2, tab3 = st.tabs(["📉 ACP & Clusters", "🧪 ANOVA", "🔗 Corrélations"])
         
         with tab1:
-            st.subheader("Analyse en Composantes Principales (ACP)")
-            st.write("Visualisez la structuration de la population en fonction de ses caractères.")
+            c1, c2, c3 = st.columns(3)
+            x_ax = c1.selectbox("Axe X", num_cols, format_func=lambda x: LABEL_MAP.get(x, x))
+            y_ax = c2.selectbox("Axe Y", num_cols, index=1, format_func=lambda x: LABEL_MAP.get(x, x))
+            col_ax = c3.selectbox("Couleur", cat_cols, format_func=lambda x: LABEL_MAP.get(x, x))
+            fig = px.scatter(df, x=x_ax, y=y_ax, color=col_ax, labels=LABEL_MAP, template="plotly_white")
+            st.plotly_chart(fig, use_container_width=True)
             
-            if len(num_cols) >= 2:
-                col_pca1, col_pca2, col_pca3 = st.columns(3)
-                # On laisse le chercheur choisir ses axes
-                x_axis = col_pca1.selectbox("Axe X (PC1)", num_cols, index=0)
-                y_axis = col_pca2.selectbox("Axe Y (PC2)", num_cols, index=min(1, len(num_cols)-1))
-                color_by = col_pca3.selectbox("Grouper par (Couleur)", cat_cols if cat_cols else [None])
-
-                fig_pca = px.scatter(df, x=x_axis, y=y_axis, color=color_by, 
-                                     size="Age" if "Age" in num_cols else None,
-                                     hover_name="ID" if "ID" in df.columns else None,
-                                     title=f"Projection : {x_axis} vs {y_axis}",
-                                     template="plotly_white")
-                st.plotly_chart(fig_pca, use_container_width=True)
-                
-            else:
-                st.info("L'ACP nécessite au moins deux variables numériques.")
 
         with tab2:
-            st.subheader("Analyse de la Variance (ANOVA)")
-            if num_cols and cat_cols:
-                col_an1, col_an2 = st.columns(2)
-                var_quant = col_an1.selectbox("Caractère mesuré", num_cols)
-                var_qual = col_an2.selectbox("Facteur de groupe", cat_cols)
-                
-                fig_box = px.box(df, x=var_qual, y=var_quant, color=var_qual, 
-                                 points="all", notched=True,
-                                 title=f"Distribution de {var_quant} selon {var_qual}")
-                st.plotly_chart(fig_box, use_container_width=True)
-                
-            else:
-                st.info("L'ANOVA nécessite une variable numérique et une variable catégorielle.")
+            var_q = st.selectbox("Caractère", num_cols, format_func=lambda x: LABEL_MAP.get(x, x), key="v_q")
+            var_f = st.selectbox("Facteur", cat_cols, format_func=lambda x: LABEL_MAP.get(x, x), key="v_f")
+            st.plotly_chart(px.box(df, x=var_f, y=var_q, color=var_f, labels=LABEL_MAP), use_container_width=True)
+            
 
         with tab3:
-            st.subheader("Matrice de Corrélation de Pearson")
-            # On ne prend que les variables numériques présentes dans le DataFrame
-            if len(num_cols) > 1:
-                selected_num = st.multiselect("Variables à inclure dans la matrice", num_cols, default=num_cols[:7])
-                if selected_num:
-                    corr = df[selected_num].corr()
-                    fig_corr = px.imshow(corr, text_auto=True, color_continuous_scale='RdBu_r', 
-                                         title="Intensité des liaisons phénotypiques")
-                    st.plotly_chart(fig_corr, use_container_width=True)
-                    
-                else:
-                    st.warning("Sélectionnez au moins une variable.")
-            else:
-                st.info("Pas assez de données numériques pour calculer des corrélations.")
+            df_corr = df[num_cols].rename(columns=LABEL_MAP)
+            st.plotly_chart(px.imshow(df_corr.corr(), text_auto=True, color_continuous_scale='RdBu_r'), use_container_width=True)
             
 
-# --- 6. PAGE 3 : PRÉDICTION & GENEBANK (VERSION PROFESSIONNELLE CORRIGÉE) ---
+# --- 6. PAGE 3 : PRÉDICTION & GENEBANK ---
 elif menu == "🔮 Prédiction & GeneBank":
-    st.title("🔬 Expertise Génomique & Conservation GeneBank")
-    st.info("Interface de liaison entre les descripteurs phénotypiques et les référentiels mondiaux (NCBI/FAO).")
-
+    st.title("🔮 Expertise Génomique")
     if not st.session_state.db_data.empty:
-        id_sel = st.selectbox("Sélectionner l'individu (Accession ID)", st.session_state.db_data["ID"])
+        id_sel = st.selectbox("Individu", st.session_state.db_data["ID"])
         data = st.session_state.db_data[st.session_state.db_data["ID"] == id_sel].iloc[0]
         
-        # --- BLOC 1 : MÉTRIQUES DE PERFORMANCE ---
-        c1, c2, c3 = st.columns(3)
-        c1.metric("Potentiel de Croissance (GMQ)", f"{data['GMQ']} g/j")
-        
-        # Indice de Pureté basé sur la conformité
-        purete = 88.5 if data['GMQ'] > 200 else 72.0
-        c2.metric("Indice de Pureté Estimé", f"{purete}%")
-        
-        # NCBI Taxon ID
-        c3.metric("NCBI Taxon ID", "9940", help="Identifiant mondial unique pour Ovis aries")
-
-        st.markdown("---")
-
-        col_left, col_right = st.columns([1, 1])
-
-        with col_left:
-            st.subheader("🧬 Radar de Conformation (Standard FAO)")
-            fig_radar = go.Figure(data=go.Scatterpolar(
-                r=[data['V2'], data['V3'], data['V4'], data['V5'], data['V1']/2],
-                theta=['Garrot', 'Croupe', 'Corps', 'Thorax', 'Masse'], 
-                fill='toself',
-                line_color='teal'
-            ))
-            fig_radar.update_layout(polar=dict(radialaxis=dict(visible=True, range=[0, 120])))
-            st.plotly_chart(fig_radar, use_container_width=True)
-
-        with col_right:
-            st.subheader("🌐 Ressources Génomiques Externes")
-            st.write("Consulter les référentiels pour cet échantillon :")
+        c1, c2 = st.columns(2)
+        with c1:
+            st.subheader("🧬 Radar FAO")
+            r_vals = [data['V2'], data['V3'], data['V4'], data['V5'], data['V1']/2]
+            fig_r = go.Figure(data=go.Scatterpolar(r=r_vals, theta=['Garrot', 'Croupe', 'Corps', 'Thorax', 'Masse'], fill='toself'))
+            st.plotly_chart(fig_r)
             
-            c_btn1, c_btn2 = st.columns(2)
-            
-            if c_btn1.button("🧬 Search NCBI Gene"):
-                url_ncbi = f"https://www.ncbi.nlm.nih.gov/gene/?term=Ovis+aries+growth"
-                st.markdown(f'<meta http-equiv="refresh" content="0;URL={url_ncbi}">', unsafe_allow_html=True)
-            
-            if c_btn2.button("🏦 FAO DAD-IS Database"):
-                url_fao = "https://www.fao.org/dad-is/en/"
-                st.markdown(f'<meta http-equiv="refresh" content="0;URL={url_fao}">', unsafe_allow_html=True)
-            
-            st.divider()
-            st.write("**Statut de Conservation :**")
-            if purete > 85:
-                st.success("💎 ÉLITE : Priorité Séquençage & Cryopréservation")
-            else:
-                st.info("📈 PRODUCTION : Suivi standard en ferme pilote")
-
-        # --- MODULE DE SÉQUENÇAGE PRÉDICTIF ---
-        st.markdown("---")
-        st.subheader("🧬 Séquençage Virtuel & Analyse de Marqueurs")
         
-        gene_name = "MSTN (Myostatine)"
-        
-        # Algorithme de prédiction
-        if data['GMQ'] > 200:
-            predicted_seq = "ATGCGTACGTTAGCAGCTAGCTAGCTAG"
-            genotype_label = "Homozygote Supérieur (AA)"
-            interpretation = "🚀 Mutation favorable détectée : Potentiel musculaire élevé."
-            color = "green"
-        else:
-            predicted_seq = "ATGCGTACGTTAGCGGCTAGCTAGCTAG"
-            genotype_label = "Standard (GG)"
-            interpretation = "⚖️ Génotype sauvage : Croissance conforme à la moyenne."
-            color = "orange"
+        with c2:
+            st.subheader("🧬 Séquençage Virtuel")
+            seq = "ATGCGTACGTTAGCAGCTAG" if data['GMQ'] > 200 else "ATGCGTACGTTAGCGGCTAG"
+            st.code(seq)
+            st.success("Génotype AA (Élite)" if data['GMQ'] > 200 else "Génotype GG (Standard)")
+            if st.button("🚀 Lancer BLAST NCBI"):
+                st.markdown(f'<meta http-equiv="refresh" content="0;URL=https://blast.ncbi.nlm.nih.gov/Blast.cgi?QUERY={seq}">', unsafe_allow_html=True)
 
-        c_seq1, c_seq2 = st.columns([2, 1])
-        
-        with c_seq1:
-            st.write(f"**Séquence ADN prédite (Gène {gene_name}) :**")
-            st.code(predicted_seq, language="text")
-            st.markdown(f"<span style='color:{color}'>**Interprétation :** {interpretation}</span>", unsafe_allow_html=True)
-
-        with c_seq2:
-            st.metric("Génotype Prédit", genotype_label)
-            
-        if st.button("🚀 Lancer l'alignement BLAST (NCBI)"):
-            url_blast = f"https://blast.ncbi.nlm.nih.gov/Blast.cgi?PROGRAM=blastn&PAGE_TYPE=BlastSearch&QUERY={predicted_seq}"
-            st.markdown(f'<meta http-equiv="refresh" content="0;URL={url_blast}">', unsafe_allow_html=True)
-
-    else:
-        st.warning("⚠️ La base de données est vide. Veuillez identifier un animal d'abord.")
-
-# --- 7. PAGE 4 : CROISEMENT ---
+# --- 7. PAGE 4 : SIMULATION ---
 elif menu == "🔀 Simulation de Croisement":
-    st.title("🔀 Laboratoire de Simulation & Dérive Génétique")
-    
-    tab1, tab2, tab3, tab4 = st.tabs([
-        "🧬 Croisement F1", 
-        "⏳ Fixation & Fixation", 
-        "📉 Dérive Génétique (Drift)",
-        "🎲 Probabilités Génotypiques"
-    ])
-
-    # --- TAB 1 & 2 : (Garder le code précédent pour F1 et Fixation) ---
-    with tab1:
-        st.subheader("Prédiction des performances F1")
-        if len(st.session_state.db_data) >= 2:
-            m = st.selectbox("Père", st.session_state.db_data["ID"], key="m1")
-            f = st.selectbox("Mère", st.session_state.db_data["ID"], key="f1")
-            p1 = st.session_state.db_data[st.session_state.db_data["ID"] == m].iloc[0]['GMQ']
-            p2 = st.session_state.db_data[st.session_state.db_data["ID"] == f].iloc[0]['GMQ']
-            st.metric("GMQ attendu en F1 (+5% hétérosis)", f"{(p1 + p2) / 2 * 1.05:.2f} g/j")
-        else: st.warning("Ajoutez des individus dans la base.")
-
-    with tab2:
-        st.subheader("Modèle de Fixation de Caractère")
-        type_c = st.radio("Allèle cible :", ["Dominant", "Récessif"])
-        st.info(f"Estimation : Fixation à 95% en **{5 if type_c=='Dominant' else 12}** générations.")
-
-    # --- TAB 3 : DÉRIVE GÉNÉTIQUE & CONSANGUINITÉ (NOUVEAU) ---
-    with tab3:
-        st.subheader("📉 Simulation de la Dérive Génétique")
-        st.write("Visualisez comment la taille du troupeau ($Ne$) influence la perte de diversité.")
-        
-        ne = st.slider("Taille efficace de la population (Ne)", 10, 500, 50)
-        gen = st.slider("Nombre de générations", 5, 50, 20)
-        
-        # Algorithme de Simulation de la Fréquence Allélique (Modèle Wright-Fisher)
-        freq = 0.5  # Fréquence initiale (50%)
+    st.title("🔀 Simulation de Croisement & Dérive")
+    if len(st.session_state.db_data) >= 2:
+        ne = st.slider("Taille efficace (Ne)", 10, 500, 50)
+        gen = st.slider("Générations", 5, 50, 20)
+        freq = 0.5
         history = [freq]
         for _ in range(gen):
-            # Loi Binomiale pour simuler le tirage aléatoire des gamètes
             freq = np.random.binomial(2*ne, freq) / (2*ne)
             history.append(freq)
-        
-        # Graphique Plotly
-        fig_drift = px.line(x=list(range(gen+1)), y=history, 
-                            labels={'x': 'Générations', 'y': 'Fréquence Allélique (p)'},
-                            title=f"Évolution d'un allèle sur {gen} générations (Ne={ne})")
-        fig_drift.add_hline(y=1.0, line_dash="dash", line_color="green", annotation_text="Fixation")
-        fig_drift.add_hline(y=0.0, line_dash="dash", line_color="red", annotation_text="Perte")
-        st.plotly_chart(fig_drift, use_container_width=True)
-        
-        # Calcul du coefficient de consanguinité (F)
-        f_coeff = 1 - (1 - 1/(2*ne))**gen
-        st.error(f"⚠️ Coefficient de consanguinité estimé (F) après {gen} générations : **{f_coeff:.4f}**")
-
-    # --- TAB 4 : GÉNOTYPE (PUNNETT) ---
-    with tab4:
-        st.subheader("Probabilités Génotypiques (Mendel)")
-        p1_g = st.selectbox("Génotype Père", ["AA", "Aa", "aa"])
-        p2_g = st.selectbox("Génotype Mère", ["AA", "Aa", "aa"])
-        # (Logique de Punnett simplifiée comme précédemment)
-        st.write(f"Résultat du croisement : {p1_g} x {p2_g}")
-            
-
-# --- 8. PAGE 5 : BASE DE DONNÉES & GESTIONNAIRE D'IMPORT ---
-elif menu == "📊 Base de Données & Export":
-    st.title("📊 Gestionnaire de Données Multi-Sources")
-    
-    # --- SECTION A : IMPORTATION ---
-    st.subheader("📥 Importer des données externes")
-    uploaded_file = st.file_uploader("Choisir un fichier CSV ou Excel (Chercheur externe)", type=["csv", "xlsx"])
-
-    if uploaded_file:
-        # Lecture du fichier selon le format
-        try:
-            if uploaded_file.name.endswith('.csv'):
-                ext_data = pd.read_csv(uploaded_file)
-            else:
-                ext_data = pd.read_excel(uploaded_file)
-            
-            st.write("🔍 **Aperçu des données détectées :**", ext_data.head(3))
-            
-            # Système de Mapping (Mise en correspondance)
-            st.info("🎯 **Standardisation :** Faites correspondre les colonnes externes avec le format BioGen")
-            col_map1, col_map2 = st.columns(2)
-            
-            with col_map1:
-                target_id = st.selectbox("Sélectionner la colonne ID", ext_data.columns)
-                target_poids = st.selectbox("Sélectionner la colonne Poids (V1)", ext_data.columns)
-            
-            with col_map2:
-                target_age = st.selectbox("Sélectionner la colonne Âge", ext_data.columns)
-                target_gmq = st.selectbox("Colonne GMQ", ["Calculer automatiquement"] + list(ext_data.columns))
-
-            if st.button("🔄 Fusionner & Convertir les données"):
-                # Création d'un DataFrame temporaire au format standard de l'app
-                prepared_data = pd.DataFrame(columns=st.session_state.db_data.columns)
-                
-                prepared_data["ID"] = ext_data[target_id]
-                prepared_data["Age"] = ext_data[target_age]
-                prepared_data["V1"] = ext_data[target_poids]
-                prepared_data["Date"] = datetime.now().date()
-                
-                # Calcul ou récupération du GMQ
-                if target_gmq == "Calculer automatiquement":
-                    # Formule : (Poids_actuel - Poids_naissance) / (Age_en_jours) * 1000
-                    prepared_data["GMQ"] = ((ext_data[target_poids] - 4.0) / (ext_data[target_age] * 30.44) * 1000).round(2)
-                else:
-                    prepared_data["GMQ"] = ext_data[target_gmq]
-
-                # Intégration dans la base principale (session_state)
-                st.session_state.db_data = pd.concat([st.session_state.db_data, prepared_data], ignore_index=True)
-                st.success(f"✅ {len(prepared_data)} individus ajoutés au registre centralisé !")
-        
-        except Exception as e:
-            st.error(f"Erreur lors de la lecture du fichier : {e}")
-
-    st.markdown("---")
-    
-    # --- SECTION B : AFFICHAGE & EXPORTATION ---
-    st.subheader("📋 Registre Centralisé & Exportation LIMS")
-    
-    if st.session_state.db_data.empty:
-        st.info("Le registre est vide pour le moment.")
+        st.plotly_chart(px.line(y=history, labels={'y': 'Fréquence p', 'x': 'Génération'}, title="Simulation Dérive Génétique"))
     else:
-        # 1. Affichage du tableau interactif
-        st.dataframe(st.session_state.db_data, use_container_width=True)
-        
-        # 2. Boutons d'exportation
-        st.write("📤 **Télécharger les données consolidées :**")
-        c_exp1, c_exp2 = st.columns(2)
-        
-        # Export CSV (Standard pour Excel/R/Python)
-        csv = st.session_state.db_data.to_csv(index=False).encode('utf-8')
-        c_exp1.download_button(
-            label="📥 Télécharger en CSV",
-            data=csv,
-            file_name=f"BioGen_Export_{datetime.now().strftime('%Y%m%d')}.csv",
-            mime="text/csv",
-            use_container_width=True
-        )
-        
-        # Export Excel (Plus lisible pour les chercheurs)
-        c_exp2.info("💡 L'export CSV est recommandé pour les logiciels de statistiques (R/SPSS).")
+        st.warning("Besoin de données.")
+
+# --- 8. PAGE 5 : IMPORT / EXPORT ---
+elif menu == "📊 Base de Données & Export":
+    st.title("📊 Gestionnaire de Données")
+    up = st.file_uploader("Importer fichier", type=["csv", "xlsx"])
+    if up:
+        try:
+            ext = pd.read_csv(up) if up.name.endswith('csv') else pd.read_excel(up)
+            st.session_state.db_data = pd.concat([st.session_state.db_data, ext], ignore_index=True)
+            st.success("Données fusionnées !")
+        except: st.error("Erreur de format.")
+    
+    st.dataframe(st.session_state.db_data)
+    csv = st.session_state.db_data.to_csv(index=False).encode('utf-8')
+    st.download_button("📥 Télécharger CSV", csv, "BioGen_Export.csv", "text/csv")
