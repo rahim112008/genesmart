@@ -5,10 +5,9 @@ import plotly.express as px
 import plotly.graph_objects as go
 from datetime import datetime
 
-# --- 1. CONFIGURATION & DICTIONNAIRE SCIENTIFIQUE ---
+# --- 1. CONFIGURATION & DICTIONNAIRE ---
 st.set_page_config(page_title="BioGenExpert Pro v10.0", layout="wide", page_icon="🧬")
 
-# Dictionnaire centralisé pour transformer V1, Q16 en noms clairs
 LABEL_MAP = {
     "ID": "Identifiant Animal", "Age": "Âge (mois)", "GMQ": "Gain Moyen Quotidien (g/j)", "Date": "Date Collecte",
     "V1": "Poids Vif (kg)", "V2": "Hauteur au Garrot (cm)", "V3": "Hauteur à la Croupe (cm)", "V4": "Longueur du Corps (cm)",
@@ -20,18 +19,43 @@ LABEL_MAP = {
     "Q26": "Conformation Pis", "Q27": "Tempérament", "Q28": "Structure Sabots", "Q29": "Localisation", "Q30": "Système Élevage"
 }
 
-# --- 2. INITIALISATION DU SESSION STATE ---
+# --- 2. INITIALISATION AVEC 10 INDIVIDUS DE DÉMO ---
 if 'db_data' not in st.session_state:
-    cols = list(LABEL_MAP.keys())
-    st.session_state.db_data = pd.DataFrame(columns=cols)
-    # Ajout d'une ligne de démo pour éviter les erreurs d'affichage au départ
-    demo = {"ID": "DEMO-01", "Age": 12, "GMQ": 250.0, "Date": datetime.now().date(), "V1": 45.0, "V2": 75.0, "V3": 74.0, "V4": 82.0, "V5": 92.0}
-    for i in range(6, 16): demo[f"V{i}"] = 15.0
-    for i in range(16, 31): demo[f"Q{i}"] = "Standard"
-    st.session_state.db_data = pd.DataFrame([demo])
+    data_demo = []
+    races = ["Ouled-Djellal", "Rembi", "Hamra"]
+    couleurs = ["Blanc", "Fauve", "Brun"]
+    
+    for i in range(1, 11):
+        # Création de profils variés
+        poids = np.random.uniform(40, 75)
+        age = np.random.randint(10, 24)
+        gmq = round((poids - 4.0) / (age * 30.44) * 1000, 2)
+        
+        indiv = {
+            "ID": f"DZ-REF-{100+i}",
+            "Age": age,
+            "GMQ": gmq,
+            "Date": datetime.now().date(),
+            "V1": round(poids, 1),
+            "V2": round(np.random.uniform(70, 85), 1),
+            "V3": round(np.random.uniform(68, 83), 1),
+            "V4": round(np.random.uniform(80, 95), 1),
+            "V5": round(np.random.uniform(85, 105), 1),
+            "Q16": np.random.choice(couleurs),
+            "Q17": "Mèche longue" if gmq > 200 else "Lisse",
+            "Q18": np.random.choice(["Droit", "Busqué"]),
+            "Q29": np.random.choice(races), # On utilise Q29 pour la Race
+            "Q30": "Extensif"
+        }
+        # Remplissage par défaut pour le reste (V6-V15 et Q19-Q28)
+        for j in range(6, 16): indiv[f"V{j}"] = 15.0
+        for j in range(19, 29): indiv[f"Q{j}"] = "Standard"
+        data_demo.append(indiv)
+    
+    st.session_state.db_data = pd.DataFrame(data_demo)
 
-# --- 3. BARRE LATÉRALE ---
-st.sidebar.title("🧬 BioGen Analytics Pro")
+# --- 3. NAVIGATION ---
+st.sidebar.title("🧬 BioGen Pro Suite")
 menu = st.sidebar.radio("Navigation Pipeline", [
     "🆔 Caractérisation (Saisie)", 
     "📊 Statistiques Multivariées", 
@@ -45,9 +69,8 @@ if menu == "🆔 Caractérisation (Saisie)":
     st.title("🆔 Identification et Phénotypage")
     with st.form("main_form"):
         c1, c2 = st.columns(2)
-        id_an = c1.text_input("Identifiant Unique", "DZ-2026-")
+        id_an = c1.text_input("Identifiant Unique", "DZ-2026-NEW")
         age_an = c2.number_input("Âge (mois)", min_value=1, value=12)
-
         col_quant, col_qual = st.columns(2)
         with col_quant:
             st.subheader("📏 Mesures (V1-V15)")
@@ -55,7 +78,6 @@ if menu == "🆔 Caractérisation (Saisie)":
         with col_qual:
             st.subheader("🎨 Observations (Q16-Q30)")
             q_vals = [st.selectbox(LABEL_MAP[f"Q{i}"], ["Type A", "Type B", "Type C"]) for i in range(16, 31)]
-
         if st.form_submit_button("💾 Enregistrer"):
             gmq = round((v_vals[0] - 4.0) / (age_an * 30.44) * 1000, 2)
             new_entry = {"ID": id_an, "Age": age_an, "GMQ": gmq, "Date": datetime.now().date()}
@@ -64,87 +86,66 @@ if menu == "🆔 Caractérisation (Saisie)":
             st.session_state.db_data = pd.concat([st.session_state.db_data, pd.DataFrame([new_entry])], ignore_index=True)
             st.success("Données enregistrées !")
 
-# --- 5. PAGE 2 : STATISTIQUES DYNAMIQUES ---
+# --- 5. PAGE 2 : STATISTIQUES ---
 elif menu == "📊 Statistiques Multivariées":
-    st.title("📊 Analyses Statistiques")
+    st.title("📊 Analyses de la Population (n=10)")
     df = st.session_state.db_data
-    if len(df) < 2:
-        st.warning("Veuillez saisir au moins 2 individus.")
-    else:
-        num_cols = df.select_dtypes(include=[np.number]).columns.tolist()
-        cat_cols = df.select_dtypes(exclude=[np.number]).columns.tolist()
-        
-        tab1, tab2, tab3 = st.tabs(["📉 ACP & Clusters", "🧪 ANOVA", "🔗 Corrélations"])
-        
-        with tab1:
-            c1, c2, c3 = st.columns(3)
-            x_ax = c1.selectbox("Axe X", num_cols, format_func=lambda x: LABEL_MAP.get(x, x))
-            y_ax = c2.selectbox("Axe Y", num_cols, index=1, format_func=lambda x: LABEL_MAP.get(x, x))
-            col_ax = c3.selectbox("Couleur", cat_cols, format_func=lambda x: LABEL_MAP.get(x, x))
-            fig = px.scatter(df, x=x_ax, y=y_ax, color=col_ax, labels=LABEL_MAP, template="plotly_white")
-            st.plotly_chart(fig, use_container_width=True)
-            
-
-        with tab2:
-            var_q = st.selectbox("Caractère", num_cols, format_func=lambda x: LABEL_MAP.get(x, x), key="v_q")
-            var_f = st.selectbox("Facteur", cat_cols, format_func=lambda x: LABEL_MAP.get(x, x), key="v_f")
-            st.plotly_chart(px.box(df, x=var_f, y=var_q, color=var_f, labels=LABEL_MAP), use_container_width=True)
-            
-
-        with tab3:
-            df_corr = df[num_cols].rename(columns=LABEL_MAP)
-            st.plotly_chart(px.imshow(df_corr.corr(), text_auto=True, color_continuous_scale='RdBu_r'), use_container_width=True)
-            
-
-# --- 6. PAGE 3 : PRÉDICTION & GENEBANK ---
-elif menu == "🔮 Prédiction & GeneBank":
-    st.title("🔮 Expertise Génomique")
-    if not st.session_state.db_data.empty:
-        id_sel = st.selectbox("Individu", st.session_state.db_data["ID"])
-        data = st.session_state.db_data[st.session_state.db_data["ID"] == id_sel].iloc[0]
-        
-        c1, c2 = st.columns(2)
-        with c1:
-            st.subheader("🧬 Radar FAO")
-            r_vals = [data['V2'], data['V3'], data['V4'], data['V5'], data['V1']/2]
-            fig_r = go.Figure(data=go.Scatterpolar(r=r_vals, theta=['Garrot', 'Croupe', 'Corps', 'Thorax', 'Masse'], fill='toself'))
-            st.plotly_chart(fig_r)
-            
-        
-        with c2:
-            st.subheader("🧬 Séquençage Virtuel")
-            seq = "ATGCGTACGTTAGCAGCTAG" if data['GMQ'] > 200 else "ATGCGTACGTTAGCGGCTAG"
-            st.code(seq)
-            st.success("Génotype AA (Élite)" if data['GMQ'] > 200 else "Génotype GG (Standard)")
-            if st.button("🚀 Lancer BLAST NCBI"):
-                st.markdown(f'<meta http-equiv="refresh" content="0;URL=https://blast.ncbi.nlm.nih.gov/Blast.cgi?QUERY={seq}">', unsafe_allow_html=True)
-
-# --- 7. PAGE 4 : SIMULATION ---
-elif menu == "🔀 Simulation de Croisement":
-    st.title("🔀 Simulation de Croisement & Dérive")
-    if len(st.session_state.db_data) >= 2:
-        ne = st.slider("Taille efficace (Ne)", 10, 500, 50)
-        gen = st.slider("Générations", 5, 50, 20)
-        freq = 0.5
-        history = [freq]
-        for _ in range(gen):
-            freq = np.random.binomial(2*ne, freq) / (2*ne)
-            history.append(freq)
-        st.plotly_chart(px.line(y=history, labels={'y': 'Fréquence p', 'x': 'Génération'}, title="Simulation Dérive Génétique"))
-    else:
-        st.warning("Besoin de données.")
-
-# --- 8. PAGE 5 : IMPORT / EXPORT ---
-elif menu == "📊 Base de Données & Export":
-    st.title("📊 Gestionnaire de Données")
-    up = st.file_uploader("Importer fichier", type=["csv", "xlsx"])
-    if up:
-        try:
-            ext = pd.read_csv(up) if up.name.endswith('csv') else pd.read_excel(up)
-            st.session_state.db_data = pd.concat([st.session_state.db_data, ext], ignore_index=True)
-            st.success("Données fusionnées !")
-        except: st.error("Erreur de format.")
+    num_cols = df.select_dtypes(include=[np.number]).columns.tolist()
+    cat_cols = df.select_dtypes(exclude=[np.number]).columns.tolist()
     
+    tab1, tab2, tab3 = st.tabs(["📉 ACP", "🧪 ANOVA", "🔗 Corrélations"])
+    
+    with tab1:
+        c1, c2, c3 = st.columns(3)
+        x_ax = c1.selectbox("Axe X", num_cols, index=2, format_func=lambda x: LABEL_MAP.get(x, x))
+        y_ax = c2.selectbox("Axe Y", num_cols, index=4, format_func=lambda x: LABEL_MAP.get(x, x))
+        col_ax = c3.selectbox("Grouper par", cat_cols, index=3, format_func=lambda x: LABEL_MAP.get(x, x))
+        fig = px.scatter(df, x=x_ax, y=y_ax, color=col_ax, size="GMQ", hover_name="ID", labels=LABEL_MAP, template="plotly_dark")
+        st.plotly_chart(fig, use_container_width=True)
+        
+
+    with tab2:
+        var_q = st.selectbox("Caractère", num_cols, index=2, format_func=lambda x: LABEL_MAP.get(x, x))
+        var_f = st.selectbox("Facteur", cat_cols, index=3, format_func=lambda x: LABEL_MAP.get(x, x))
+        st.plotly_chart(px.box(df, x=var_f, y=var_q, color=var_f, points="all", labels=LABEL_MAP), use_container_width=True)
+        
+
+    with tab3:
+        df_corr = df[num_cols].rename(columns=LABEL_MAP)
+        st.plotly_chart(px.imshow(df_corr.corr(), text_auto=True, color_continuous_scale='RdBu_r'), use_container_width=True)
+        
+
+# --- 6. PAGE 3 : PRÉDICTION ---
+elif menu == "🔮 Prédiction & GeneBank":
+    st.title("🔮 Expertise Individuelle")
+    id_sel = st.selectbox("Sélectionner un animal de la base", st.session_state.db_data["ID"])
+    data = st.session_state.db_data[st.session_state.db_data["ID"] == id_sel].iloc[0]
+    
+    c1, c2 = st.columns(2)
+    with c1:
+        st.subheader("🧬 Radar Morphologique")
+        r_vals = [data['V2'], data['V3'], data['V4'], data['V5'], data['V1']]
+        fig_r = go.Figure(data=go.Scatterpolar(r=r_vals, theta=['Garrot', 'Croupe', 'Corps', 'Thorax', 'Poids'], fill='toself', line_color='gold'))
+        st.plotly_chart(fig_r)
+        
+    with c2:
+        st.subheader("🧬 Génomique")
+        seq = "ATGCGTACGTTAGCAGCTAG" if data['GMQ'] > 180 else "ATGCGTACGTTAGCGGCTAG"
+        st.code(seq)
+        st.info("Statut : ÉLITE (Candidat Séquençage)" if data['GMQ'] > 180 else "Statut : PRODUCTION")
+        if st.button("🚀 BLAST NCBI"):
+            st.markdown(f'<meta http-equiv="refresh" content="0;URL=https://blast.ncbi.nlm.nih.gov/Blast.cgi?QUERY={seq}">', unsafe_allow_html=True)
+
+# --- 7. PAGE 4 & 5 (Simulation & Base) ---
+elif menu == "🔀 Simulation de Croisement":
+    st.title("🔀 Simulation")
+    ne = st.slider("Taille Ne", 10, 200, 50)
+    history = [0.5]
+    for _ in range(20): history.append(np.random.binomial(2*ne, history[-1])/(2*ne))
+    st.line_chart(history)
+
+elif menu == "📊 Base de Données & Export":
+    st.title("📊 Registre LIMS")
     st.dataframe(st.session_state.db_data)
     csv = st.session_state.db_data.to_csv(index=False).encode('utf-8')
-    st.download_button("📥 Télécharger CSV", csv, "BioGen_Export.csv", "text/csv")
+    st.download_button("📥 Télécharger CSV", csv, "BioGen_Soutenance.csv")
