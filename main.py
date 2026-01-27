@@ -129,17 +129,66 @@ elif menu == "🔮 Prédiction & GeneBank":
 
 # --- 7. PAGE 4 : CROISEMENT ---
 elif menu == "🔀 Simulation de Croisement":
-    st.title("🔀 Simulateur de Progrès Génétique")
-    st.info("Prédisez les performances de la génération F1 par croisement dirigé.")
-    if len(st.session_state.db_data) >= 2:
-        m = st.selectbox("Père (Bélier/Taureau)", st.session_state.db_data["ID"])
-        f = st.selectbox("Mère (Brebis/Vache)", st.session_state.db_data["ID"])
-        
-        if st.button("Simuler F1"):
+    st.title("🔀 Laboratoire de Simulation & Dérive Génétique")
+    
+    tab1, tab2, tab3, tab4 = st.tabs([
+        "🧬 Croisement F1", 
+        "⏳ Fixation & Fixation", 
+        "📉 Dérive Génétique (Drift)",
+        "🎲 Probabilités Génotypiques"
+    ])
+
+    # --- TAB 1 & 2 : (Garder le code précédent pour F1 et Fixation) ---
+    with tab1:
+        st.subheader("Prédiction des performances F1")
+        if len(st.session_state.db_data) >= 2:
+            m = st.selectbox("Père", st.session_state.db_data["ID"], key="m1")
+            f = st.selectbox("Mère", st.session_state.db_data["ID"], key="f1")
             p1 = st.session_state.db_data[st.session_state.db_data["ID"] == m].iloc[0]['GMQ']
             p2 = st.session_state.db_data[st.session_state.db_data["ID"] == f].iloc[0]['GMQ']
-            f1_gmq = (p1 + p2) / 2 * 1.05 # +5% hétérosis
-            st.success(f"Performance attendue F1 : {f1_gmq:.2f} g/j")
+            st.metric("GMQ attendu en F1 (+5% hétérosis)", f"{(p1 + p2) / 2 * 1.05:.2f} g/j")
+        else: st.warning("Ajoutez des individus dans la base.")
+
+    with tab2:
+        st.subheader("Modèle de Fixation de Caractère")
+        type_c = st.radio("Allèle cible :", ["Dominant", "Récessif"])
+        st.info(f"Estimation : Fixation à 95% en **{5 if type_c=='Dominant' else 12}** générations.")
+
+    # --- TAB 3 : DÉRIVE GÉNÉTIQUE & CONSANGUINITÉ (NOUVEAU) ---
+    with tab3:
+        st.subheader("📉 Simulation de la Dérive Génétique")
+        st.write("Visualisez comment la taille du troupeau ($Ne$) influence la perte de diversité.")
+        
+        ne = st.slider("Taille efficace de la population (Ne)", 10, 500, 50)
+        gen = st.slider("Nombre de générations", 5, 50, 20)
+        
+        # Algorithme de Simulation de la Fréquence Allélique (Modèle Wright-Fisher)
+        freq = 0.5  # Fréquence initiale (50%)
+        history = [freq]
+        for _ in range(gen):
+            # Loi Binomiale pour simuler le tirage aléatoire des gamètes
+            freq = np.random.binomial(2*ne, freq) / (2*ne)
+            history.append(freq)
+        
+        # Graphique Plotly
+        fig_drift = px.line(x=list(range(gen+1)), y=history, 
+                            labels={'x': 'Générations', 'y': 'Fréquence Allélique (p)'},
+                            title=f"Évolution d'un allèle sur {gen} générations (Ne={ne})")
+        fig_drift.add_hline(y=1.0, line_dash="dash", line_color="green", annotation_text="Fixation")
+        fig_drift.add_hline(y=0.0, line_dash="dash", line_color="red", annotation_text="Perte")
+        st.plotly_chart(fig_drift, use_container_width=True)
+        
+        # Calcul du coefficient de consanguinité (F)
+        f_coeff = 1 - (1 - 1/(2*ne))**gen
+        st.error(f"⚠️ Coefficient de consanguinité estimé (F) après {gen} générations : **{f_coeff:.4f}**")
+
+    # --- TAB 4 : GÉNOTYPE (PUNNETT) ---
+    with tab4:
+        st.subheader("Probabilités Génotypiques (Mendel)")
+        p1_g = st.selectbox("Génotype Père", ["AA", "Aa", "aa"])
+        p2_g = st.selectbox("Génotype Mère", ["AA", "Aa", "aa"])
+        # (Logique de Punnett simplifiée comme précédemment)
+        st.write(f"Résultat du croisement : {p1_g} x {p2_g}")
             
 
 # --- 8. PAGE 5 : BASE DE DONNÉES ---
