@@ -110,7 +110,7 @@ elif menu == "📊 Statistiques Multivariées":
             st.plotly_chart(px.imshow(corr, text_auto=True, color_continuous_scale='RdBu_r'), use_container_width=True)
             
 
-# --- 6. PAGE 3 : PRÉDICTION & GENEBANK (VERSION PROFESSIONNELLE) ---
+# --- 6. PAGE 3 : PRÉDICTION & GENEBANK (VERSION PROFESSIONNELLE CORRIGÉE) ---
 elif menu == "🔮 Prédiction & GeneBank":
     st.title("🔬 Expertise Génomique & Conservation GeneBank")
     st.info("Interface de liaison entre les descripteurs phénotypiques et les référentiels mondiaux (NCBI/FAO).")
@@ -123,11 +123,11 @@ elif menu == "🔮 Prédiction & GeneBank":
         c1, c2, c3 = st.columns(3)
         c1.metric("Potentiel de Croissance (GMQ)", f"{data['GMQ']} g/j")
         
-        # Indice de Pureté basé sur la conformité aux standards de la race
+        # Indice de Pureté basé sur la conformité
         purete = 88.5 if data['GMQ'] > 200 else 72.0
         c2.metric("Indice de Pureté Estimé", f"{purete}%")
         
-        # Ajout du Taxon ID NCBI automatique (ex: 9940 pour Ovis aries)
+        # NCBI Taxon ID
         c3.metric("NCBI Taxon ID", "9940", help="Identifiant mondial unique pour Ovis aries")
 
         st.markdown("---")
@@ -144,31 +144,42 @@ elif menu == "🔮 Prédiction & GeneBank":
             ))
             fig_radar.update_layout(polar=dict(radialaxis=dict(visible=True, range=[0, 120])))
             st.plotly_chart(fig_radar, use_container_width=True)
-            
 
         with col_right:
             st.subheader("🌐 Ressources Génomiques Externes")
-            st.write("Consulter les séquences de référence pour cet échantillon :")
+            st.write("Consulter les référentiels pour cet échantillon :")
             
-            # Boutons de redirection vers les bases de données réelles
             c_btn1, c_btn2 = st.columns(2)
-            # --- MODULE DE SÉQUENÇAGE PRÉDICTIF (BIO-INFORMATIQUE) ---
+            
+            if c_btn1.button("🧬 Search NCBI Gene"):
+                url_ncbi = f"https://www.ncbi.nlm.nih.gov/gene/?term=Ovis+aries+growth"
+                st.markdown(f'<meta http-equiv="refresh" content="0;URL={url_ncbi}">', unsafe_allow_html=True)
+            
+            if c_btn2.button("🏦 FAO DAD-IS Database"):
+                url_fao = "https://www.fao.org/dad-is/en/"
+                st.markdown(f'<meta http-equiv="refresh" content="0;URL={url_fao}">', unsafe_allow_html=True)
+            
+            st.divider()
+            st.write("**Statut de Conservation :**")
+            if purete > 85:
+                st.success("💎 ÉLITE : Priorité Séquençage & Cryopréservation")
+            else:
+                st.info("📈 PRODUCTION : Suivi standard en ferme pilote")
+
+        # --- MODULE DE SÉQUENÇAGE PRÉDICTIF ---
         st.markdown("---")
         st.subheader("🧬 Séquençage Virtuel & Analyse de Marqueurs")
         
-        # Simulation d'un gène d'intérêt (ex: Myostatine MSTN pour la croissance)
         gene_name = "MSTN (Myostatine)"
         
-        # Algorithme de prédiction de séquence basé sur le phénotype
+        # Algorithme de prédiction
         if data['GMQ'] > 200:
-            # Séquence avec mutation favorable (G -> A) à la position 15
-            predicted_seq = "ATGCGTACGTTAGC**A**GCTAGCTAGCTAG"
+            predicted_seq = "ATGCGTACGTTAGCAGCTAGCTAGCTAG"
             genotype_label = "Homozygote Supérieur (AA)"
             interpretation = "🚀 Mutation favorable détectée : Potentiel musculaire élevé."
             color = "green"
         else:
-            # Séquence standard (Wild Type)
-            predicted_seq = "ATGCGTACGTTAGC**G**GCTAGCTAGCTAG"
+            predicted_seq = "ATGCGTACGTTAGCGGCTAGCTAGCTAG"
             genotype_label = "Standard (GG)"
             interpretation = "⚖️ Génotype sauvage : Croissance conforme à la moyenne."
             color = "orange"
@@ -182,55 +193,13 @@ elif menu == "🔮 Prédiction & GeneBank":
 
         with c_seq2:
             st.metric("Génotype Prédit", genotype_label)
-            st.info("Cette séquence est générée par inférence statistique à partir des mesures morphométriques.")
-
-        # Bouton BLAST mis à jour avec la séquence prédite
-        if st.button("🚀 Vérifier cette séquence sur NCBI BLAST"):
-            clean_seq = predicted_seq.replace("**", "") # On enlève le gras pour l'URL
-            url_blast = f"https://blast.ncbi.nlm.nih.gov/Blast.cgi?PROGRAM=blastn&PAGE_TYPE=BlastSearch&QUERY={clean_seq}"
+            
+        if st.button("🚀 Lancer l'alignement BLAST (NCBI)"):
+            url_blast = f"https://blast.ncbi.nlm.nih.gov/Blast.cgi?PROGRAM=blastn&PAGE_TYPE=BlastSearch&QUERY={predicted_seq}"
             st.markdown(f'<meta http-equiv="refresh" content="0;URL={url_blast}">', unsafe_allow_html=True)
-            # Lien vers NCBI Gene pour la Myostatine (exemple de gène d'intérêt ovin)
-            if c_btn1.button("🧬 Search NCBI Gene"):
-                url_ncbi = f"https://www.ncbi.nlm.nih.gov/gene/?term=Ovis+aries+growth"
-                st.markdown(f'<meta http-equiv="refresh" content="0;URL={url_ncbi}">', unsafe_allow_html=True)
-            
-            # Lien vers la base DAD-IS de la FAO
-            if c_btn2.button("🏦 FAO DAD-IS Database"):
-                url_fao = "https://www.fao.org/dad-is/en/"
-                st.markdown(f'<meta http-equiv="refresh" content="0;URL={url_fao}">', unsafe_allow_html=True)
-            
-            st.divider()
-            st.write("**Statut de Conservation :**")
-            if purete > 85:
-                st.success("💎 ÉLITE : Priorité Séquençage & Cryopréservation")
-            else:
-                st.info("📈 PRODUCTION : Suivi standard en ferme pilote")
 
     else:
         st.warning("⚠️ La base de données est vide. Veuillez identifier un animal d'abord.")
-
-         # --- NOUVEAU : MODULE DE SÉQUENÇAGE & BLAST ---
-        st.markdown("---")
-        st.subheader("🧬 Analyse de Séquences Moléculaires (NCBI BLAST)")
-        
-        col_dna1, col_dna2 = st.columns([2, 1])
-        
-        with col_dna1:
-            fasta_seq = st.text_area("Entrer la séquence FASTA (Fragment ADN/Marqueur)", 
-                                     "ATGCGATCGTAGCTAGCTAGCTAGCTAGCTAGCTAGCTAGCTAGCTAG", 
-                                     height=150)
-            st.caption("Standard : Format IUPAC (A, T, G, C)")
-
-        with col_dna2:
-            st.write("**Outil de Comparaison :**")
-            st.info("Le moteur BLAST comparera cette séquence avec la base 'nt/nr' mondiale pour identifier des polymorphismes (SNP) liés à la croissance.")
-            
-            # Bouton de lien vers NCBI BLAST
-            if st.button("🚀 Lancer l'alignement BLAST"):
-                # On prépare l'URL de recherche BLAST avec la séquence
-                url_blast = f"https://blast.ncbi.nlm.nih.gov/Blast.cgi?PROGRAM=blastn&PAGE_TYPE=BlastSearch&QUERY={fasta_seq}"
-                st.markdown(f'<meta http-equiv="refresh" content="0;URL={url_blast}">', unsafe_allow_html=True)
-                st.success("Transfert vers le serveur NCBI...")   
 
 # --- 7. PAGE 4 : CROISEMENT ---
 elif menu == "🔀 Simulation de Croisement":
