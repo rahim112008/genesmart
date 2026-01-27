@@ -184,9 +184,31 @@ elif menu == "🔀 Simulation de Croisement":
         
         
 
-# --- 8. PAGE 5 : BASE DE DONNÉES ---
+# --- 8. PAGE 5 : BASE DE DONNÉES & EXPORT LISIBLE ---
 elif menu == "📊 Base de Données & Export":
-    st.title("📊 Registre Centralisé")
+    st.title("📊 Registre Centralisé (LIMS)")
+    
+    # On utilise LABEL_MAP pour que le tableau soit compréhensible pour le jury
     df_readable = st.session_state.db_data.rename(columns=LABEL_MAP)
+    
+    st.write(f"Nombre d'individus enregistrés : **{len(df_readable)}**")
+    
+    # Affichage du tableau interactif
     st.dataframe(df_readable, use_container_width=True)
-    st.download_button("📥 Télécharger CSV", df_readable.to_csv(index=False).encode('utf-8'), "BioGen_Export.csv")
+    
+    st.markdown("---")
+    st.subheader("📤 Exportation des données")
+    col_ex1, col_ex2 = st.columns(2)
+    
+    # Préparation du fichier CSV
+    csv = df_readable.to_csv(index=False).encode('utf-8')
+    
+    col_ex1.download_button(
+        label="📥 Télécharger la base complète (CSV)",
+        data=csv,
+        file_name=f"BioGen_Export_{datetime.now().strftime('%Y%m%d')}.csv",
+        mime="text/csv",
+        use_container_width=True
+    )
+    
+    col_ex2.info("💡 **Note pour la soutenance :** Le fichier exporté contient les noms complets des caractères, ce qui permet une interopérabilité immédiate avec d'autres logiciels d'analyse statistique comme R ou Excel.")
