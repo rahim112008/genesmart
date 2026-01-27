@@ -172,7 +172,29 @@ elif menu == "🔮 Prédiction & GeneBank":
 
     else:
         st.warning("⚠️ La base de données est vide. Veuillez identifier un animal d'abord.")
+
+         # --- NOUVEAU : MODULE DE SÉQUENÇAGE & BLAST ---
+        st.markdown("---")
+        st.subheader("🧬 Analyse de Séquences Moléculaires (NCBI BLAST)")
         
+        col_dna1, col_dna2 = st.columns([2, 1])
+        
+        with col_dna1:
+            fasta_seq = st.text_area("Entrer la séquence FASTA (Fragment ADN/Marqueur)", 
+                                     "ATGCGATCGTAGCTAGCTAGCTAGCTAGCTAGCTAGCTAGCTAGCTAG", 
+                                     height=150)
+            st.caption("Standard : Format IUPAC (A, T, G, C)")
+
+        with col_dna2:
+            st.write("**Outil de Comparaison :**")
+            st.info("Le moteur BLAST comparera cette séquence avec la base 'nt/nr' mondiale pour identifier des polymorphismes (SNP) liés à la croissance.")
+            
+            # Bouton de lien vers NCBI BLAST
+            if st.button("🚀 Lancer l'alignement BLAST"):
+                # On prépare l'URL de recherche BLAST avec la séquence
+                url_blast = f"https://blast.ncbi.nlm.nih.gov/Blast.cgi?PROGRAM=blastn&PAGE_TYPE=BlastSearch&QUERY={fasta_seq}"
+                st.markdown(f'<meta http-equiv="refresh" content="0;URL={url_blast}">', unsafe_allow_html=True)
+                st.success("Transfert vers le serveur NCBI...")   
 
 # --- 7. PAGE 4 : CROISEMENT ---
 elif menu == "🔀 Simulation de Croisement":
