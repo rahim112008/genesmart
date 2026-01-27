@@ -266,8 +266,50 @@ elif menu == "🔀 Simulation de Croisement":
             
 
 # --- 8. PAGE 5 : BASE DE DONNÉES ---
+# --- PAGE : BASE DE DONNÉES & IMPORTATION FLEXIBLE ---
 elif menu == "📊 Base de Données & Export":
-    st.title("📊 Registre LIMS Complet")
+    st.title("📊 Gestionnaire de Données Multi-Sources")
+    
+    # 1. MODULE D'IMPORTATION
+    st.subheader("📥 Importer des données externes")
+    uploaded_file = st.file_uploader("Choisir un fichier CSV ou Excel (Chercheur externe)", type=["csv", "xlsx"])
+
+    if uploaded_file:
+        ext_data = pd.read_csv(uploaded_file) if uploaded_file.name.endswith('.csv') else pd.read_excel(uploaded_file)
+        
+        st.write("🔍 **Données détectées :**", ext_data.head(3))
+        
+        # Système de Mapping (Mise en correspondance)
+        st.info("Faites correspondre les colonnes du chercheur avec les standards BioGen :")
+        col_map1, col_map2 = st.columns(2)
+        
+        with col_map1:
+            target_id = st.selectbox("Colonne pour l'ID", ext_data.columns)
+            target_poids = st.selectbox("Colonne pour le Poids (V1)", ext_data.columns)
+        
+        with col_map2:
+            target_age = st.selectbox("Colonne pour l'Âge", ext_data.columns)
+            target_gmq = st.selectbox("Colonne pour le GMQ (si existant)", ["Calculer automatiquement"] + list(ext_data.columns))
+
+        if st.button("🔄 Fusionner & Standardiser"):
+            # Transformation des données externes au format interne
+            prepared_data = pd.DataFrame()
+            prepared_data["ID"] = ext_data[target_id]
+            prepared_data["Age"] = ext_data[target_age]
+            prepared_data["V1"] = ext_data[target_poids]
+            
+            # Gestion du GMQ
+            if target_gmq == "Calculer automatiquement":
+                prepared_data["GMQ"] = (prepared_data["V1"] - 4.0) / (prepared_data["Age"] * 30.44) * 1000
+            else:
+                prepared_data["GMQ"] = ext_data[target_gmq]
+
+            # Intégration dans la base principale
+            st.session_state.db_data = pd.concat([st.session_state.db_data, prepared_data], ignore_index=True)
+            st.success(f"✅ {len(prepared_data)} lignes importées et converties avec succès !")
+
+    st.markdown("---")
+    
+    # 2. AFFICHAGE DE LA BASE FUSIONNÉE
+    st.subheader("📋 Registre Centralisé")
     st.dataframe(st.session_state.db_data, use_container_width=True)
-    csv = st.session_state.db_data.to_csv(index=False).encode('utf-8')
-    st.download_button("📥 Exporter la base (CSV)", csv, "BioGen_Full_Data.csv", "text/csv")
