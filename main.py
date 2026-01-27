@@ -136,16 +136,87 @@ elif menu == "🔮 Prédiction & GeneBank":
         if st.button("🚀 BLAST NCBI"):
             st.markdown(f'<meta http-equiv="refresh" content="0;URL=https://blast.ncbi.nlm.nih.gov/Blast.cgi?QUERY={seq}">', unsafe_allow_html=True)
 
-# --- 7. PAGE 4 & 5 (Simulation & Base) ---
+# --- 7. PAGE 4 : LABORATOIRE DE SIMULATION GÉNÉTIQUE ---
 elif menu == "🔀 Simulation de Croisement":
-    st.title("🔀 Simulation")
-    ne = st.slider("Taille Ne", 10, 200, 50)
-    history = [0.5]
-    for _ in range(20): history.append(np.random.binomial(2*ne, history[-1])/(2*ne))
-    st.line_chart(history)
+    st.title("🔀 Laboratoire de Simulation & Amélioration")
+    
+    st.markdown("""
+    Ce module permet de simuler l'évolution génétique d'un troupeau sur plusieurs générations 
+    selon les modèles de **Wright-Fisher** (hasard) et de **Sélection Directionnelle**.
+    """)
 
+    tab_drift, tab_cross = st.tabs(["📉 Dérive & Consanguinité", "🧬 Prédiction de Croisement"])
+
+    with tab_drift:
+        st.subheader("Simulateur de Dérive Génétique (Hasard)")
+        col_s1, col_s2 = st.columns(2)
+        
+        ne = col_s1.slider("Taille efficace du troupeau (Ne)", 10, 500, 50, help="Nombre de reproducteurs actifs")
+        gen = col_s2.slider("Nombre de générations à simuler", 5, 100, 25)
+        
+        # Simulation
+        p = 0.5  # Fréquence initiale de l'allèle (50%)
+        history = [p]
+        for _ in range(gen):
+            # Loi Binomiale : tirage aléatoire des allèles dans la génération suivante
+            p = np.random.binomial(2*ne, p) / (2*ne)
+            history.append(p)
+        
+        # Graphique interactif
+        fig_drift = px.line(x=list(range(gen+1)), y=history, 
+                            labels={'x': 'Générations', 'y': 'Fréquence Allélique'},
+                            title=f"Évolution de la diversité génétique (Ne={ne})")
+        fig_drift.add_hline(y=1.0, line_dash="dash", line_color="green", annotation_text="Fixation")
+        fig_drift.add_hline(y=0.0, line_dash="dash", line_color="red", annotation_text="Extinction")
+        st.plotly_chart(fig_drift, use_container_width=True)
+        
+
+        # Calcul du risque
+        f_coeff = 1 - (1 - 1/(2*ne))**gen
+        st.error(f"⚠️ Risque de consanguinité estimé (F) : **{f_coeff:.4f}**")
+
+    with tab_cross:
+        st.subheader("Prédiction de la descendance F1")
+        if len(st.session_state.db_data) >= 2:
+            st.write("Sélectionnez deux reproducteurs de votre base pour prédire le poids de la descendance :")
+            c_p1, c_p2 = st.columns(2)
+            
+            pere = c_p1.selectbox("Sélectionner le Père", st.session_state.db_data["ID"], key="pa")
+            mere = c_p2.selectbox("Sélectionner la Mère", st.session_state.db_data["ID"], key="ma")
+            
+            p1_val = st.session_state.db_data[st.session_state.db_data["ID"] == pere]["V1"].values[0]
+            p2_val = st.session_state.db_data[st.session_state.db_data["ID"] == mere]["V1"].values[0]
+            
+            heterosis = st.slider("Effet d'Hétérosis (%)", 0, 15, 5)
+            f1_pred = ((p1_val + p2_val) / 2) * (1 + heterosis/100)
+            
+            st.success(f"⚖️ Poids moyen attendu pour les agneaux F1 : **{f1_pred:.2f} kg**")
+            
+        else:
+            st.info("Ajoutez des animaux dans la base pour simuler un croisement.")
+
+# --- 8. PAGE 5 : BASE DE DONNÉES & EXPORT LISIBLE ---
 elif menu == "📊 Base de Données & Export":
-    st.title("📊 Registre LIMS")
-    st.dataframe(st.session_state.db_data)
-    csv = st.session_state.db_data.to_csv(index=False).encode('utf-8')
-    st.download_button("📥 Télécharger CSV", csv, "BioGen_Soutenance.csv")
+    st.title("📊 Registre Centralisé (LIMS)")
+    
+    # On crée une copie pour l'affichage avec les noms complets
+    df_readable = st.session_state.db_data.rename(columns=LABEL_MAP)
+    
+    st.write(f"Nombre d'individus enregistrés : **{len(df_readable)}**")
+    
+    # Affichage du tableau propre
+    st.dataframe(df_readable, use_container_width=True)
+    
+    st.markdown("---")
+    st.subheader("📤 Exportation des données")
+    col_ex1, col_ex2 = st.columns(2)
+    
+    csv = df_readable.to_csv(index=False).encode('utf-8')
+    col_ex1.download_button(
+        label="📥 Télécharger la base complète (CSV)",
+        data=csv,
+        file_name=f"BioGen_Export_{datetime.now().strftime('%Y%m%d')}.csv",
+        mime="text/csv",
+        use_container_width=True
+    )
+    col_ex2.info("Le fichier exporté contient les noms complets des caractères (Poids, Hauteur, etc.) pour être directement utilisable dans Excel.")
