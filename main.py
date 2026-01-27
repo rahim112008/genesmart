@@ -81,33 +81,73 @@ if menu == "🆔 Caractérisation (30 Car.)":
             st.success("Données archivées avec succès.")
             st.balloons()
 
-# --- 5. PAGE 2 : STATISTIQUES MULTIVARIÉES ---
+# --- 5. PAGE 2 : STATISTIQUES MULTIVARIÉES (VERSION DYNAMIQUE) ---
 elif menu == "📊 Statistiques Multivariées":
     st.title("📊 Moteur d'Analyse Bio-Statistique")
     
+    # Vérification si la base contient assez de données
     if len(st.session_state.db_data) < 2:
-        st.warning("Veuillez saisir au moins 2 individus pour activer les analyses.")
+        st.warning("⚠️ Base de données insuffisante. Veuillez saisir ou importer au moins 2 individus.")
     else:
+        df = st.session_state.db_data
+        
+        # Séparation automatique des colonnes numériques et qualitatives
+        num_cols = df.select_dtypes(include=[np.number]).columns.tolist()
+        cat_cols = df.select_dtypes(exclude=[np.number]).columns.tolist()
+
         tab1, tab2, tab3 = st.tabs(["📉 ACP & Clusters", "🧪 ANOVA One-Way", "🔗 Corrélations"])
         
         with tab1:
             st.subheader("Analyse en Composantes Principales (ACP)")
-            fig_pca = px.scatter(st.session_state.db_data, x="V2", y="V1", color="Q16", size="Age",
-                                 labels={"V2": "Hauteur (PC1)", "V1": "Poids (PC2)"}, title="Projection Phénotypique")
-            st.plotly_chart(fig_pca, use_container_width=True)
+            st.write("Visualisez la structuration de la population en fonction de ses caractères.")
             
+            if len(num_cols) >= 2:
+                col_pca1, col_pca2, col_pca3 = st.columns(3)
+                # On laisse le chercheur choisir ses axes
+                x_axis = col_pca1.selectbox("Axe X (PC1)", num_cols, index=0)
+                y_axis = col_pca2.selectbox("Axe Y (PC2)", num_cols, index=min(1, len(num_cols)-1))
+                color_by = col_pca3.selectbox("Grouper par (Couleur)", cat_cols if cat_cols else [None])
+
+                fig_pca = px.scatter(df, x=x_axis, y=y_axis, color=color_by, 
+                                     size="Age" if "Age" in num_cols else None,
+                                     hover_name="ID" if "ID" in df.columns else None,
+                                     title=f"Projection : {x_axis} vs {y_axis}",
+                                     template="plotly_white")
+                st.plotly_chart(fig_pca, use_container_width=True)
+                
+            else:
+                st.info("L'ACP nécessite au moins deux variables numériques.")
 
         with tab2:
             st.subheader("Analyse de la Variance (ANOVA)")
-            fig_box = px.box(st.session_state.db_data, x="Q16", y="V1", color="Q16", title="Influence de la Robe sur le Poids")
-            st.plotly_chart(fig_box, use_container_width=True)
-            
+            if num_cols and cat_cols:
+                col_an1, col_an2 = st.columns(2)
+                var_quant = col_an1.selectbox("Caractère mesuré", num_cols)
+                var_qual = col_an2.selectbox("Facteur de groupe", cat_cols)
+                
+                fig_box = px.box(df, x=var_qual, y=var_quant, color=var_qual, 
+                                 points="all", notched=True,
+                                 title=f"Distribution de {var_quant} selon {var_qual}")
+                st.plotly_chart(fig_box, use_container_width=True)
+                
+            else:
+                st.info("L'ANOVA nécessite une variable numérique et une variable catégorielle.")
 
         with tab3:
             st.subheader("Matrice de Corrélation de Pearson")
-            numeric_cols = ["Age", "GMQ", "V1", "V2", "V3", "V4", "V5"]
-            corr = st.session_state.db_data[numeric_cols].corr()
-            st.plotly_chart(px.imshow(corr, text_auto=True, color_continuous_scale='RdBu_r'), use_container_width=True)
+            # On ne prend que les variables numériques présentes dans le DataFrame
+            if len(num_cols) > 1:
+                selected_num = st.multiselect("Variables à inclure dans la matrice", num_cols, default=num_cols[:7])
+                if selected_num:
+                    corr = df[selected_num].corr()
+                    fig_corr = px.imshow(corr, text_auto=True, color_continuous_scale='RdBu_r', 
+                                         title="Intensité des liaisons phénotypiques")
+                    st.plotly_chart(fig_corr, use_container_width=True)
+                    
+                else:
+                    st.warning("Sélectionnez au moins une variable.")
+            else:
+                st.info("Pas assez de données numériques pour calculer des corrélations.")
             
 
 # --- 6. PAGE 3 : PRÉDICTION & GENEBANK (VERSION PROFESSIONNELLE CORRIGÉE) ---
