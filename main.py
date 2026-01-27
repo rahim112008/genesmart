@@ -265,51 +265,83 @@ elif menu == "🔀 Simulation de Croisement":
         st.write(f"Résultat du croisement : {p1_g} x {p2_g}")
             
 
-# --- 8. PAGE 5 : BASE DE DONNÉES ---
-# --- PAGE : BASE DE DONNÉES & IMPORTATION FLEXIBLE ---
+# --- 8. PAGE 5 : BASE DE DONNÉES & GESTIONNAIRE D'IMPORT ---
 elif menu == "📊 Base de Données & Export":
     st.title("📊 Gestionnaire de Données Multi-Sources")
     
-    # 1. MODULE D'IMPORTATION
+    # --- SECTION A : IMPORTATION ---
     st.subheader("📥 Importer des données externes")
     uploaded_file = st.file_uploader("Choisir un fichier CSV ou Excel (Chercheur externe)", type=["csv", "xlsx"])
 
     if uploaded_file:
-        ext_data = pd.read_csv(uploaded_file) if uploaded_file.name.endswith('.csv') else pd.read_excel(uploaded_file)
-        
-        st.write("🔍 **Données détectées :**", ext_data.head(3))
-        
-        # Système de Mapping (Mise en correspondance)
-        st.info("Faites correspondre les colonnes du chercheur avec les standards BioGen :")
-        col_map1, col_map2 = st.columns(2)
-        
-        with col_map1:
-            target_id = st.selectbox("Colonne pour l'ID", ext_data.columns)
-            target_poids = st.selectbox("Colonne pour le Poids (V1)", ext_data.columns)
-        
-        with col_map2:
-            target_age = st.selectbox("Colonne pour l'Âge", ext_data.columns)
-            target_gmq = st.selectbox("Colonne pour le GMQ (si existant)", ["Calculer automatiquement"] + list(ext_data.columns))
-
-        if st.button("🔄 Fusionner & Standardiser"):
-            # Transformation des données externes au format interne
-            prepared_data = pd.DataFrame()
-            prepared_data["ID"] = ext_data[target_id]
-            prepared_data["Age"] = ext_data[target_age]
-            prepared_data["V1"] = ext_data[target_poids]
-            
-            # Gestion du GMQ
-            if target_gmq == "Calculer automatiquement":
-                prepared_data["GMQ"] = (prepared_data["V1"] - 4.0) / (prepared_data["Age"] * 30.44) * 1000
+        # Lecture du fichier selon le format
+        try:
+            if uploaded_file.name.endswith('.csv'):
+                ext_data = pd.read_csv(uploaded_file)
             else:
-                prepared_data["GMQ"] = ext_data[target_gmq]
+                ext_data = pd.read_excel(uploaded_file)
+            
+            st.write("🔍 **Aperçu des données détectées :**", ext_data.head(3))
+            
+            # Système de Mapping (Mise en correspondance)
+            st.info("🎯 **Standardisation :** Faites correspondre les colonnes externes avec le format BioGen")
+            col_map1, col_map2 = st.columns(2)
+            
+            with col_map1:
+                target_id = st.selectbox("Sélectionner la colonne ID", ext_data.columns)
+                target_poids = st.selectbox("Sélectionner la colonne Poids (V1)", ext_data.columns)
+            
+            with col_map2:
+                target_age = st.selectbox("Sélectionner la colonne Âge", ext_data.columns)
+                target_gmq = st.selectbox("Colonne GMQ", ["Calculer automatiquement"] + list(ext_data.columns))
 
-            # Intégration dans la base principale
-            st.session_state.db_data = pd.concat([st.session_state.db_data, prepared_data], ignore_index=True)
-            st.success(f"✅ {len(prepared_data)} lignes importées et converties avec succès !")
+            if st.button("🔄 Fusionner & Convertir les données"):
+                # Création d'un DataFrame temporaire au format standard de l'app
+                prepared_data = pd.DataFrame(columns=st.session_state.db_data.columns)
+                
+                prepared_data["ID"] = ext_data[target_id]
+                prepared_data["Age"] = ext_data[target_age]
+                prepared_data["V1"] = ext_data[target_poids]
+                prepared_data["Date"] = datetime.now().date()
+                
+                # Calcul ou récupération du GMQ
+                if target_gmq == "Calculer automatiquement":
+                    # Formule : (Poids_actuel - Poids_naissance) / (Age_en_jours) * 1000
+                    prepared_data["GMQ"] = ((ext_data[target_poids] - 4.0) / (ext_data[target_age] * 30.44) * 1000).round(2)
+                else:
+                    prepared_data["GMQ"] = ext_data[target_gmq]
+
+                # Intégration dans la base principale (session_state)
+                st.session_state.db_data = pd.concat([st.session_state.db_data, prepared_data], ignore_index=True)
+                st.success(f"✅ {len(prepared_data)} individus ajoutés au registre centralisé !")
+        
+        except Exception as e:
+            st.error(f"Erreur lors de la lecture du fichier : {e}")
 
     st.markdown("---")
     
-    # 2. AFFICHAGE DE LA BASE FUSIONNÉE
-    st.subheader("📋 Registre Centralisé")
-    st.dataframe(st.session_state.db_data, use_container_width=True)
+    # --- SECTION B : AFFICHAGE & EXPORTATION ---
+    st.subheader("📋 Registre Centralisé & Exportation LIMS")
+    
+    if st.session_state.db_data.empty:
+        st.info("Le registre est vide pour le moment.")
+    else:
+        # 1. Affichage du tableau interactif
+        st.dataframe(st.session_state.db_data, use_container_width=True)
+        
+        # 2. Boutons d'exportation
+        st.write("📤 **Télécharger les données consolidées :**")
+        c_exp1, c_exp2 = st.columns(2)
+        
+        # Export CSV (Standard pour Excel/R/Python)
+        csv = st.session_state.db_data.to_csv(index=False).encode('utf-8')
+        c_exp1.download_button(
+            label="📥 Télécharger en CSV",
+            data=csv,
+            file_name=f"BioGen_Export_{datetime.now().strftime('%Y%m%d')}.csv",
+            mime="text/csv",
+            use_container_width=True
+        )
+        
+        # Export Excel (Plus lisible pour les chercheurs)
+        c_exp2.info("💡 L'export CSV est recommandé pour les logiciels de statistiques (R/SPSS).")
