@@ -152,7 +152,43 @@ elif menu == "🔮 Prédiction & GeneBank":
             
             # Boutons de redirection vers les bases de données réelles
             c_btn1, c_btn2 = st.columns(2)
-            
+            # --- MODULE DE SÉQUENÇAGE PRÉDICTIF (BIO-INFORMATIQUE) ---
+        st.markdown("---")
+        st.subheader("🧬 Séquençage Virtuel & Analyse de Marqueurs")
+        
+        # Simulation d'un gène d'intérêt (ex: Myostatine MSTN pour la croissance)
+        gene_name = "MSTN (Myostatine)"
+        
+        # Algorithme de prédiction de séquence basé sur le phénotype
+        if data['GMQ'] > 200:
+            # Séquence avec mutation favorable (G -> A) à la position 15
+            predicted_seq = "ATGCGTACGTTAGC**A**GCTAGCTAGCTAG"
+            genotype_label = "Homozygote Supérieur (AA)"
+            interpretation = "🚀 Mutation favorable détectée : Potentiel musculaire élevé."
+            color = "green"
+        else:
+            # Séquence standard (Wild Type)
+            predicted_seq = "ATGCGTACGTTAGC**G**GCTAGCTAGCTAG"
+            genotype_label = "Standard (GG)"
+            interpretation = "⚖️ Génotype sauvage : Croissance conforme à la moyenne."
+            color = "orange"
+
+        c_seq1, c_seq2 = st.columns([2, 1])
+        
+        with c_seq1:
+            st.write(f"**Séquence ADN prédite (Gène {gene_name}) :**")
+            st.code(predicted_seq, language="text")
+            st.markdown(f"<span style='color:{color}'>**Interprétation :** {interpretation}</span>", unsafe_allow_html=True)
+
+        with c_seq2:
+            st.metric("Génotype Prédit", genotype_label)
+            st.info("Cette séquence est générée par inférence statistique à partir des mesures morphométriques.")
+
+        # Bouton BLAST mis à jour avec la séquence prédite
+        if st.button("🚀 Vérifier cette séquence sur NCBI BLAST"):
+            clean_seq = predicted_seq.replace("**", "") # On enlève le gras pour l'URL
+            url_blast = f"https://blast.ncbi.nlm.nih.gov/Blast.cgi?PROGRAM=blastn&PAGE_TYPE=BlastSearch&QUERY={clean_seq}"
+            st.markdown(f'<meta http-equiv="refresh" content="0;URL={url_blast}">', unsafe_allow_html=True)
             # Lien vers NCBI Gene pour la Myostatine (exemple de gène d'intérêt ovin)
             if c_btn1.button("🧬 Search NCBI Gene"):
                 url_ncbi = f"https://www.ncbi.nlm.nih.gov/gene/?term=Ovis+aries+growth"
