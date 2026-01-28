@@ -184,31 +184,62 @@ elif menu == "🔀 Simulation de Croisement":
         
         
 
-# --- 8. PAGE 5 : BASE DE DONNÉES & EXPORT LISIBLE ---
+# --- 8. PAGE 5 : BASE DE DONNÉES & GESTION DES FICHIERS ---
 elif menu == "📊 Base de Données & Export":
-    st.title("📊 Registre Centralisé (LIMS)")
+    st.title("📊 Gestionnaire de Données (LIMS Pro)")
     
-    # On utilise LABEL_MAP pour que le tableau soit compréhensible pour le jury
-    df_readable = st.session_state.db_data.rename(columns=LABEL_MAP)
-    
-    st.write(f"Nombre d'individus enregistrés : **{len(df_readable)}**")
-    
-    # Affichage du tableau interactif
-    st.dataframe(df_readable, use_container_width=True)
-    
-    st.markdown("---")
-    st.subheader("📤 Exportation des données")
-    col_ex1, col_ex2 = st.columns(2)
-    
-    # Préparation du fichier CSV
-    csv = df_readable.to_csv(index=False).encode('utf-8')
-    
-    col_ex1.download_button(
-        label="📥 Télécharger la base complète (CSV)",
-        data=csv,
-        file_name=f"BioGen_Export_{datetime.now().strftime('%Y%m%d')}.csv",
-        mime="text/csv",
-        use_container_width=True
-    )
-    
-    col_ex2.info("💡 **Note pour la soutenance :** Le fichier exporté contient les noms complets des caractères, ce qui permet une interopérabilité immédiate avec d'autres logiciels d'analyse statistique comme R ou Excel.")
+    tab_view, tab_import, tab_clean = st.tabs(["👀 Consulter & Exporter", "📥 Importer", "🧹 Nettoyage Automatique"])
+
+    with tab_view:
+        st.subheader("Registre Actuel")
+        df_readable = st.session_state.db_data.rename(columns=LABEL_MAP)
+        st.write(f"Nombre d'individus en mémoire : **{len(df_readable)}**")
+        st.dataframe(df_readable, use_container_width=True)
+        
+        csv = df_readable.to_csv(index=False).encode('utf-8')
+        st.download_button("📥 Télécharger la base (CSV)", csv, f"BioGen_Export_{datetime.now().strftime('%Y%m%d')}.csv", "text/csv", use_container_width=True)
+
+    with tab_import:
+        st.subheader("📥 Importation de fichiers externes")
+        uploaded_file = st.file_uploader("Charger un CSV ou Excel", type=['csv', 'xlsx'])
+        
+        if uploaded_file is not None:
+            try:
+                df_upload = pd.read_csv(uploaded_file) if uploaded_file.name.endswith('.csv') else pd.read_excel(uploaded_file)
+                st.write("🔍 Aperçu du fichier :")
+                st.dataframe(df_upload.head(3))
+
+                if st.button("🔄 Fusionner avec la base"):
+                    st.session_state.db_data = pd.concat([st.session_state.db_data, df_upload], ignore_index=True)
+                    st.success("✅ Données fusionnées !")
+            except Exception as e:
+                st.error(f"Erreur : {e}")
+
+    with tab_clean:
+        st.subheader("🧹 Laboratoire de Nettoyage de Données")
+        st.write("Cet outil prépare vos données pour l'analyse statistique (ACP, ANOVA).")
+        
+        col_c1, col_c2 = st.columns(2)
+        
+        # Détection des problèmes
+        doublons = st.session_state.db_data.duplicated().sum()
+        valeurs_vides = st.session_state.db_data.isna().sum().sum()
+        
+        col_c1.metric("Doublons détectés", doublons)
+        col_c2.metric("Valeurs manquantes", valeurs_vides)
+        
+        if st.button("🚀 Lancer le Nettoyage Bio-Statistique"):
+            # 1. Suppression des doublons
+            st.session_state.db_data = st.session_state.db_data.drop_duplicates()
+            
+            # 2. Remplissage des valeurs vides par la moyenne (pour les chiffres)
+            num_cols = st.session_state.db_data.select_dtypes(include=[np.number]).columns
+            st.session_state.db_data[num_cols] = st.session_state.db_data[num_cols].fillna(st.session_state.db_data[num_cols].mean())
+            
+            # 3. Suppression des lignes vraiment vides
+            st.session_state.db_data = st.session_state.db_data.dropna(how='all')
+            
+            st.success("✨ Nettoyage terminé : Les données sont désormais prêtes pour l'ACP !")
+            st.rerun()
+
+    st.info("💡 **Argument de Soutenance :** Ce module intègre une étape de 'Data Cleaning'. Il garantit que les analyses multivariées ne sont pas faussées par des données manquantes ou redondantes, assurant ainsi la fiabilité scientifique des résultats.")
