@@ -1,245 +1,631 @@
 import streamlit as st
+import sqlite3
+import json
 import pandas as pd
-import numpy as np
 import plotly.express as px
 import plotly.graph_objects as go
 from datetime import datetime
+from PIL import Image
+import numpy as np
+import requests
 
-# --- 1. CONFIGURATION & DICTIONNAIRE ---
-st.set_page_config(page_title="BioGenExpert Pro v10.0", layout="wide", page_icon="🧬")
-
-LABEL_MAP = {
-    "ID": "Identifiant Animal", "Age": "Âge (mois)", "GMQ": "Gain Moyen Quotidien (g/j)", "Date": "Date Collecte",
-    "V1": "Poids Vif (kg)", "V2": "Hauteur au Garrot (cm)", "V3": "Hauteur à la Croupe (cm)", "V4": "Longueur du Corps (cm)",
-    "V5": "Périmètre Thoracique (cm)", "V6": "Largeur Poitrine (cm)", "V7": "Profondeur Poitrine (cm)", "V8": "Largeur Hanches (cm)",
-    "V9": "Largeur Trochanters (cm)", "V10": "Longueur Croupe (cm)", "V11": "Périmètre Canon (cm)", "V12": "Longueur Tête (cm)",
-    "V13": "Largeur Tête (cm)", "V14": "Longueur Oreilles (cm)", "V15": "Longueur Cornes (cm)",
-    "Q16": "Couleur Robe", "Q17": "Type Toison", "Q18": "Profil Tête", "Q19": "Forme Cornes", "Q20": "Position Oreilles",
-    "Q21": "Pendeloques", "Q22": "Pigmentation Peau", "Q23": "Type Queue", "Q24": "Présence Cornes", "Q25": "État Santé",
-    "Q26": "Conformation Pis", "Q27": "Tempérament", "Q28": "Structure Sabots", "Q29": "Localisation", "Q30": "Système Élevage",
-    "Sire": "Père (Sire)", "Dam": "Mère (Dam)"
+# ------------------------------------------------------------
+# CONSTANTS
+# ------------------------------------------------------------
+SPECIES = {
+    "ovin": {
+        "name": "Ovin",
+        "icon": "🐑",
+        "category": "animal",
+        "breeds": ["Ouled Djellal", "Hamra", "Sidahou"],
+        "life_stages": [
+            {"id": "agneau", "name": "Agneau", "gender": "male"},
+            {"id": "agnelle", "name": "Agnelle", "gender": "female"},
+            {"id": "belier", "name": "Bélier", "gender": "male"},
+            {"id": "brebis", "name": "Brebis", "gender": "female"}
+        ],
+        "physiological_states": ["vide", "gestante", "allaitante", "lactation", "tarie"],
+        "morphometrics": {
+            "male": [
+                {"name": "longueur_corps", "unit": "cm", "label": "Longueur du corps"},
+                {"name": "hauteur_garrot", "unit": "cm", "label": "Hauteur au garrot"},
+                {"name": "largeur_poitrine", "unit": "cm", "label": "Largeur de poitrine"},
+                {"name": "perimetre_scrotal", "unit": "cm", "label": "Périmètre scrotal"}
+            ],
+            "female": [
+                {"name": "longueur_corps", "unit": "cm", "label": "Longueur du corps"},
+                {"name": "hauteur_garrot", "unit": "cm", "label": "Hauteur au garrot"},
+                {"name": "largeur_poitrine", "unit": "cm", "label": "Largeur de poitrine"}
+            ],
+            "udder_measures": [
+                {"name": "profondeur_mamelle", "unit": "cm", "label": "Profondeur de la mamelle"},
+                {"name": "hauteur_plancher", "unit": "cm", "label": "Hauteur du plancher"},
+                {"name": "longueur_trayons", "unit": "cm", "label": "Longueur des trayons"},
+                {"name": "diametre_trayons", "unit": "cm", "label": "Diamètre des trayons"},
+                {"name": "placement_trayons", "unit": "code", "label": "Placement"},
+                {"name": "score_symetrie", "unit": "1-5", "label": "Score de symétrie"},
+                {"name": "sante_mamelle", "unit": "text", "label": "État de santé"}
+            ]
+        },
+        "genetic_markers": [
+            {"gene": "DGAT1", "trait": "Matière grasse du lait", "priority": "high"},
+            {"gene": "GDF9", "trait": "Prolificité", "priority": "medium"}
+        ],
+        "carcass": {
+            "formula": "ovine",
+            "dressing_percent": 0.48,
+            "bone_percent": 0.18,
+            "fat_percent": 0.22,
+            "muscle_percent": 0.60
+        },
+        "milk_reference": {"fat": 6.5, "protein": 5.8, "lactose": 4.5, "somatic_cells_threshold": 400000}
+    },
+    "bovin": {
+        "name": "Bovin",
+        "icon": "🐄",
+        "category": "animal",
+        "breeds": ["Locale", "Améliorée"],
+        "life_stages": [
+            {"id": "veau", "name": "Veau", "gender": "male"},
+            {"id": "genisse", "name": "Génisse", "gender": "female"},
+            {"id": "taureau", "name": "Taureau", "gender": "male"},
+            {"id": "vache", "name": "Vache", "gender": "female"}
+        ],
+        "physiological_states": ["vide", "gestante", "allaitante", "lactation", "tarie"],
+        "morphometrics": {
+            "male": [
+                {"name": "longueur_corps", "unit": "cm", "label": "Longueur du corps"},
+                {"name": "hauteur_garrot", "unit": "cm", "label": "Hauteur au garrot"},
+                {"name": "largeur_poitrine", "unit": "cm", "label": "Largeur de poitrine"},
+                {"name": "perimetre_scrotal", "unit": "cm", "label": "Périmètre scrotal"}
+            ],
+            "female": [
+                {"name": "longueur_corps", "unit": "cm", "label": "Longueur du corps"},
+                {"name": "hauteur_garrot", "unit": "cm", "label": "Hauteur au garrot"},
+                {"name": "largeur_poitrine", "unit": "cm", "label": "Largeur de poitrine"}
+            ],
+            "udder_measures": [
+                {"name": "profondeur_mamelle", "unit": "cm", "label": "Profondeur de la mamelle"},
+                {"name": "hauteur_plancher", "unit": "cm", "label": "Hauteur du plancher"},
+                {"name": "longueur_trayons", "unit": "cm", "label": "Longueur des trayons"},
+                {"name": "diametre_trayons", "unit": "cm", "label": "Diamètre des trayons"}
+            ]
+        },
+        "genetic_markers": [
+            {"gene": "DGAT1", "trait": "Matière grasse", "priority": "high"}
+        ],
+        "carcass": {
+            "formula": "bovine",
+            "dressing_percent": 0.55,
+            "bone_percent": 0.16,
+            "fat_percent": 0.20,
+            "muscle_percent": 0.64
+        },
+        "milk_reference": {"fat": 4.0, "protein": 3.3, "lactose": 4.8, "somatic_cells_threshold": 200000}
+    }
 }
 
-# --- 2. INITIALISATION AVEC 10 INDIVIDUS DE DÉMO ---
-if 'db_data' not in st.session_state:
-    data_demo = []
-    races = ["Ouled-Djellal", "Rembi", "Hamra"]
-    couleurs = ["Blanc", "Fauve", "Brun"]
-    
-    for i in range(1, 11):
-        poids = np.random.uniform(40, 75)
-        age = np.random.randint(10, 24)
-        gmq = round((poids - 4.0) / (age * 30.44) * 1000, 2)
-        
-        indiv = {
-            "ID": f"DZ-REF-{100+i}",
-            "Age": age,
-            "GMQ": gmq,
-            "Date": datetime.now().date(),
-            "V1": round(poids, 1),
-            "V2": round(np.random.uniform(70, 85), 1),
-            "V3": round(np.random.uniform(68, 83), 1),
-            "V4": round(np.random.uniform(80, 95), 1),
-            "V5": round(np.random.uniform(85, 105), 1),
-            "Q16": np.random.choice(couleurs),
-            "Q17": "Mèche longue" if gmq > 200 else "Lisse",
-            "Q18": np.random.choice(["Droit", "Busqué"]),
-            "Q29": np.random.choice(races),
-            "Q30": "Extensif",
-            "Sire": "Inconnu",
-            "Dam": "Inconnu"
+CARCASS_FORMULAS = {
+    "ovine": {
+        "muscle": lambda lw, bcs: 0.45 * lw * (1 + 0.02 * (bcs - 3)),
+        "fat": lambda lw, bcs: 0.22 * lw * (1 + 0.05 * (bcs - 3)),
+        "bone": lambda lw: 0.18 * lw
+    },
+    "bovine": {
+        "muscle": lambda lw, bcs: 0.55 * lw,
+        "fat": lambda lw, bcs: 0.20 * lw,
+        "bone": lambda lw: 0.16 * lw
+    }
+}
+
+# ------------------------------------------------------------
+# DATABASE FUNCTIONS
+# ------------------------------------------------------------
+DB_PATH = "genapagie.db"
+
+def init_db():
+    conn = sqlite3.connect(DB_PATH)
+    c = conn.cursor()
+    c.execute('''
+        CREATE TABLE IF NOT EXISTS subjects (
+            id TEXT PRIMARY KEY,
+            species TEXT NOT NULL,
+            breed TEXT,
+            gender TEXT,
+            life_stage TEXT,
+            physiological_state TEXT,
+            age_months INTEGER,
+            weight_kg REAL,
+            morphometrics TEXT,
+            notes TEXT,
+            created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+            updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+        )
+    ''')
+    c.execute('''
+        CREATE TABLE IF NOT EXISTS milk_records (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            subject_id TEXT NOT NULL,
+            date TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+            quantity_l REAL,
+            protein REAL,
+            fat REAL,
+            dry_extract REAL,
+            lactose REAL,
+            ph REAL,
+            density REAL,
+            somatic_cells INTEGER,
+            acidity REAL,
+            fatty_acids TEXT,
+            notes TEXT,
+            FOREIGN KEY(subject_id) REFERENCES subjects(id)
+        )
+    ''')
+    conn.commit()
+    conn.close()
+
+def add_subject(data):
+    conn = sqlite3.connect(DB_PATH)
+    c = conn.cursor()
+    c.execute('''
+        INSERT INTO subjects (id, species, breed, gender, life_stage, physiological_state,
+                              age_months, weight_kg, morphometrics, notes)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+    ''', (
+        data['id'], data['species'], data.get('breed'), data.get('gender'),
+        data.get('life_stage'), data.get('physiological_state'),
+        data.get('age_months'), data.get('weight_kg'),
+        json.dumps(data.get('morphometrics', {})), data.get('notes')
+    ))
+    conn.commit()
+    conn.close()
+
+def get_all_subjects():
+    conn = sqlite3.connect(DB_PATH)
+    c = conn.cursor()
+    c.execute('SELECT * FROM subjects')
+    rows = c.fetchall()
+    conn.close()
+    columns = ['id', 'species', 'breed', 'gender', 'life_stage', 'physiological_state',
+               'age_months', 'weight_kg', 'morphometrics', 'notes', 'created_at', 'updated_at']
+    subjects = []
+    for row in rows:
+        subject = dict(zip(columns, row))
+        subject['morphometrics'] = json.loads(subject['morphometrics']) if subject['morphometrics'] else {}
+        subjects.append(subject)
+    return subjects
+
+def add_milk_record(record):
+    conn = sqlite3.connect(DB_PATH)
+    c = conn.cursor()
+    c.execute('''
+        INSERT INTO milk_records (subject_id, quantity_l, protein, fat, dry_extract,
+                                  lactose, ph, density, somatic_cells, acidity, fatty_acids, notes)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+    ''', (
+        record['subject_id'], record.get('quantity_l'), record.get('protein'),
+        record.get('fat'), record.get('dry_extract'), record.get('lactose'),
+        record.get('ph'), record.get('density'), record.get('somatic_cells'),
+        record.get('acidity'), json.dumps(record.get('fatty_acids', {})),
+        record.get('notes')
+    ))
+    conn.commit()
+    conn.close()
+
+def get_milk_records(subject_id):
+    conn = sqlite3.connect(DB_PATH)
+    c = conn.cursor()
+    c.execute('SELECT * FROM milk_records WHERE subject_id = ? ORDER BY date', (subject_id,))
+    rows = c.fetchall()
+    conn.close()
+    columns = ['id', 'subject_id', 'date', 'quantity_l', 'protein', 'fat', 'dry_extract',
+               'lactose', 'ph', 'density', 'somatic_cells', 'acidity', 'fatty_acids', 'notes']
+    records = []
+    for row in rows:
+        record = dict(zip(columns, row))
+        record['fatty_acids'] = json.loads(record['fatty_acids']) if record['fatty_acids'] else {}
+        records.append(record)
+    return records
+
+# ------------------------------------------------------------
+# CONNECTIVITY
+# ------------------------------------------------------------
+def check_internet():
+    try:
+        requests.get("https://www.google.com", timeout=3)
+        return True
+    except:
+        return False
+
+# ------------------------------------------------------------
+# MODULES (intégrés dans le même fichier)
+# ------------------------------------------------------------
+
+# ---- inventory ----
+def inventory_app():
+    st.title("📋 Registre Biométrique (Inventaire)")
+    subjects = get_all_subjects()
+    if not subjects:
+        st.info("Aucun sujet enregistré.")
+        return
+    df = pd.DataFrame(subjects)
+    display_cols = ['id', 'species', 'breed', 'gender', 'life_stage', 'physiological_state',
+                    'age_months', 'weight_kg', 'notes']
+    df_display = df[display_cols].copy()
+    df_display['species'] = df_display['species'].map(lambda x: SPECIES.get(x, {}).get('name', x))
+    st.dataframe(df_display, use_container_width=True)
+
+# ---- biometry ----
+def analyze_biometry_online(measurements, physiological_state, photos):
+    return {"weight": 50, "bcs": 3.2, "udder_score": 4.0, "health_status": "Bon", "recommendations": "Rien"}
+
+def analyze_biometry_offline(measurements, physiological_state, species):
+    return {"weight": 48, "bcs": 3.0, "udder_score": 3.5, "health_status": "OK (offline)", "recommendations": "Analyse basique."}
+
+def biometry_app():
+    st.title("📏 Analyse Biométrique")
+    online = st.session_state.get('online', False)
+    st.caption(f"Mode : {'🌐 En ligne' if online else '📴 Hors ligne'}")
+
+    species_keys = [k for k, v in SPECIES.items() if v['category'] in ['animal', 'insect']]
+    species = st.selectbox("Espèce", species_keys, format_func=lambda x: f"{SPECIES[x]['icon']} {SPECIES[x]['name']}")
+    species_info = SPECIES[species]
+    breed = st.selectbox("Race", species_info['breeds'])
+    life_stages = species_info['life_stages']
+    life_stage = st.selectbox("Stade de vie", options=[ls['id'] for ls in life_stages],
+                              format_func=lambda x: next(ls['name'] for ls in life_stages if ls['id']==x))
+    selected_ls = next(ls for ls in life_stages if ls['id'] == life_stage)
+    gender = selected_ls['gender']
+    physio_state = st.selectbox("État physiologique", species_info.get('physiological_states', []))
+    age_method = st.radio("Méthode d'âge", ["Mois", "Dentition"])
+    if age_method == "Mois":
+        age_months = st.number_input("Âge (mois)", min_value=0, step=1)
+    else:
+        dentition = st.selectbox("Dentition", ["2 dents", "4 dents", "6 dents", "adulte"])
+        age_months = {"2 dents":12, "4 dents":24, "6 dents":36, "adulte":48}.get(dentition, 24)
+    subject_id = st.text_input("ID (boucle/ruche/parcelle)")
+    st.info("Fonctionnalité photo à implémenter.")
+    morphometrics = {}
+    base_measures = species_info['morphometrics'].get(gender, [])
+    for m in base_measures:
+        val = st.number_input(f"{m['label']} ({m['unit']})", step=0.1)
+        morphometrics[m['name']] = val
+    if gender == 'female' and physio_state in ['gestante', 'allaitante', 'lactation']:
+        st.markdown("**Mesures mammaires**")
+        udder = {}
+        for m in species_info['morphometrics'].get('udder_measures', []):
+            if m['unit'] == 'text':
+                val = st.text_input(m['label'])
+            else:
+                val = st.number_input(f"{m['label']} ({m['unit']})", step=0.1)
+            udder[m['name']] = val
+        morphometrics['udder_measures'] = udder
+    weight_kg = st.number_input("Poids vif (kg) - si connu", min_value=0.0, step=0.1)
+    if st.button("Lancer l'analyse"):
+        data = {
+            'id': subject_id or f"{species}_{datetime.now().strftime('%Y%m%d%H%M%S')}",
+            'species': species,
+            'breed': breed,
+            'gender': gender,
+            'life_stage': life_stage,
+            'physiological_state': physio_state,
+            'age_months': age_months,
+            'weight_kg': weight_kg if weight_kg>0 else None,
+            'morphometrics': morphometrics,
+            'notes': ""
         }
-        for j in range(6, 16): indiv[f"V{j}"] = 15.0
-        for j in range(19, 29): indiv[f"Q{j}"] = "Standard"
-        data_demo.append(indiv)
-    
-    st.session_state.db_data = pd.DataFrame(data_demo)
-
-# --- FONCTION DE CALCUL DE PARENTÉ ---
-def verifier_parente(id1, id2, df):
-    if id1 == "Inconnu" or id2 == "Inconnu" or id1 == id2: return 0.0
-    row1 = df[df["ID"] == id1].iloc[0]
-    row2 = df[df["ID"] == id2].iloc[0]
-    
-    # 1. Parent/Enfant
-    if row2["Sire"] == id1 or row2["Dam"] == id1 or row1["Sire"] == id2 or row1["Dam"] == id2:
-        return 0.50
-    # 2. Frères/Soeurs (même père ET même mère)
-    if row1["Sire"] == row2["Sire"] and row1["Dam"] == row2["Dam"] and row1["Sire"] != "Inconnu":
-        return 0.50
-    # 3. Demi-frères
-    if (row1["Sire"] == row2["Sire"] or row1["Dam"] == row2["Dam"]) and row1["Sire"] != "Inconnu":
-        return 0.25
-    return 0.0
-
-# --- 3. NAVIGATION ---
-st.sidebar.title("🧬 BioGen Pro Suite")
-menu = st.sidebar.radio("Navigation Pipeline", [
-    "🆔 Caractérisation (Saisie)", 
-    "📊 Statistiques Multivariées", 
-    "🔮 Prédiction & GeneBank",
-    "🔀 Simulation de Croisement",
-    "📊 Base de Données & Export"
-])
-
-# --- 4. PAGE 1 : CARACTÉRISATION ---
-if menu == "🆔 Caractérisation (Saisie)":
-    st.title("🆔 Identification et Phénotypage")
-    with st.form("main_form"):
-        c1, c2 = st.columns(2)
-        id_an = c1.text_input("Identifiant Unique", f"DZ-{datetime.now().year}-NEW")
-        age_an = c2.number_input("Âge (mois)", min_value=1, value=12)
-        
-        st.subheader("🌳 Généalogie")
-        cg1, cg2 = st.columns(2)
-        list_anc = ["Inconnu"] + st.session_state.db_data["ID"].tolist()
-        sire_an = cg1.selectbox("Père (Sire)", list_anc)
-        dam_an = cg2.selectbox("Mère (Dam)", list_anc)
-
-        col_quant, col_qual = st.columns(2)
-        with col_quant:
-            st.subheader("📏 Mesures (V1-V15)")
-            v_vals = [st.number_input(LABEL_MAP[f"V{i}"], value=15.0 if i > 1 else 45.0) for i in range(1, 16)]
-        with col_qual:
-            st.subheader("🎨 Observations (Q16-Q30)")
-            q_vals = [st.selectbox(LABEL_MAP[f"Q{i}"], ["Type A", "Type B", "Type C"]) for i in range(16, 31)]
-            
-        if st.form_submit_button("💾 Enregistrer"):
-            gmq = round((v_vals[0] - 4.0) / (age_an * 30.44) * 1000, 2)
-            new_entry = {"ID": id_an, "Age": age_an, "GMQ": gmq, "Date": datetime.now().date(), "Sire": sire_an, "Dam": dam_an}
-            for i, v in enumerate(v_vals): new_entry[f"V{i+1}"] = v
-            for i, q in enumerate(q_vals): new_entry[f"Q{i+16}"] = q
-            st.session_state.db_data = pd.concat([st.session_state.db_data, pd.DataFrame([new_entry])], ignore_index=True)
-            st.success("Données enregistrées !")
-
-# --- 5. PAGE 2 : STATISTIQUES ---
-elif menu == "📊 Statistiques Multivariées":
-    st.title(f"📊 Analyses de la Population (n={len(st.session_state.db_data)})")
-    df = st.session_state.db_data
-    num_cols = df.select_dtypes(include=[np.number]).columns.tolist()
-    cat_cols = df.select_dtypes(exclude=[np.number]).columns.tolist()
-    tab1, tab2, tab3 = st.tabs(["📉 ACP", "🧪 ANOVA", "🔗 Corrélations"])
-    with tab1:
-        c1, c2, c3 = st.columns(3)
-        x_ax = c1.selectbox("Axe X", num_cols, index=2, format_func=lambda x: LABEL_MAP.get(x, x))
-        y_ax = c2.selectbox("Axe Y", num_cols, index=4, format_func=lambda x: LABEL_MAP.get(x, x))
-        col_ax = c3.selectbox("Grouper par", cat_cols, index=3, format_func=lambda x: LABEL_MAP.get(x, x))
-        st.plotly_chart(px.scatter(df, x=x_ax, y=y_ax, color=col_ax, size="GMQ", hover_name="ID", labels=LABEL_MAP, template="plotly_dark"), use_container_width=True)
-    with tab2:
-        var_q = st.selectbox("Caractère", num_cols, index=2, format_func=lambda x: LABEL_MAP.get(x, x))
-        var_f = st.selectbox("Facteur", cat_cols, index=3, format_func=lambda x: LABEL_MAP.get(x, x))
-        st.plotly_chart(px.box(df, x=var_f, y=var_q, color=var_f, points="all", labels=LABEL_MAP), use_container_width=True)
-    with tab3:
-        df_corr = df[num_cols].rename(columns=LABEL_MAP)
-        st.plotly_chart(px.imshow(df_corr.corr(), text_auto=True, color_continuous_scale='RdBu_r'), use_container_width=True)
-
-# --- 6. PAGE 3 : PRÉDICTION ---
-elif menu == "🔮 Prédiction & GeneBank":
-    st.title("🔮 Expertise Individuelle")
-    id_sel = st.selectbox("Sélectionner un animal de la base", st.session_state.db_data["ID"])
-    data = st.session_state.db_data[st.session_state.db_data["ID"] == id_sel].iloc[0]
-    c1, c2 = st.columns(2)
-    with c1:
-        st.subheader("🧬 Radar Morphologique")
-        r_vals = [data['V2'], data['V3'], data['V4'], data['V5'], data['V1']]
-        st.plotly_chart(go.Figure(data=go.Scatterpolar(r=r_vals, theta=['Garrot', 'Croupe', 'Corps', 'Thorax', 'Poids'], fill='toself', line_color='gold')))
-    with c2:
-        st.subheader("🧬 Génomique")
-        seq = "ATGCGTACGTTAGCAGCTAG" if data['GMQ'] > 180 else "ATGCGTACGTTAGCGGCTAG"
-        st.code(seq)
-        st.info("Statut : ÉLITE" if data['GMQ'] > 180 else "Statut : PRODUCTION")
-
-# --- 7. PAGE 4 : SIMULATION ---
-elif menu == "🔀 Simulation de Croisement":
-    st.title("🔀 Laboratoire de Simulation")
-    tab_drift, tab_cross = st.tabs(["📉 Dérive & Consanguinité", "🧬 Diagnostic de Parenté"])
-
-    with tab_drift:
-        st.subheader("Simulation Wright-Fisher")
-        ne = st.slider("Taille efficace (Ne)", 10, 500, 50)
-        gen = st.slider("Générations", 5, 100, 25)
-        p = 0.5
-        history = [p]
-        for _ in range(gen):
-            p = np.random.binomial(2*ne, p) / (2*ne)
-            history.append(p)
-        st.plotly_chart(px.line(x=list(range(gen+1)), y=history, labels={'x': 'Générations', 'y': 'Fréquence Allélique'}))
-
-    with tab_cross:
-        st.subheader("Vérification Anti-Consanguine")
-        c1, c2 = st.columns(2)
-        p_id = c1.selectbox("Sélectionner Mâle", st.session_state.db_data["ID"], key="pa")
-        m_id = c2.selectbox("Sélectionner Femelle", st.session_state.db_data["ID"], key="ma")
-        
-        coeff = verifier_parente(p_id, m_id, st.session_state.db_data)
-        
-        if p_id == m_id:
-            st.error("🚫 Impossible : C'est le même individu !")
-        elif coeff >= 0.5:
-            st.error(f"❌ RISQUE CRITIQUE (R={coeff*100}%) : Croisement direct (Frères/Sœurs ou Parent/Enfant).")
-        elif coeff > 0:
-            st.warning(f"⚠️ RISQUE MODÉRÉ (R={coeff*100}%) : Individus apparentés (Demi-frères).")
+        if online:
+            result = analyze_biometry_online(morphometrics, physio_state, [])
         else:
-            st.success("✅ ACCORDÉ : Aucune parenté directe détectée. Risque de consanguinité faible.")
-        
-        
+            result = analyze_biometry_offline(morphometrics, physio_state, species)
+        add_subject(data)
+        st.success("Sujet enregistré !")
+        st.subheader("Résultats")
+        col1, col2, col3 = st.columns(3)
+        col1.metric("Poids estimé", f"{result['weight']:.1f} kg")
+        col2.metric("BCS", f"{result['bcs']:.1f}/5")
+        if result.get('udder_score'):
+            col3.metric("Score mammaire", f"{result['udder_score']:.1f}/5")
+        st.info(f"**Santé** : {result['health_status']}")
 
-# --- 8. PAGE 5 : BASE DE DONNÉES & GESTION DES FICHIERS ---
-elif menu == "📊 Base de Données & Export":
-    st.title("📊 Gestionnaire de Données (LIMS Pro)")
-    
-    tab_view, tab_import, tab_clean = st.tabs(["👀 Consulter & Exporter", "📥 Importer", "🧹 Nettoyage Automatique"])
+# ---- milk tracking ----
+def milk_tracking_app():
+    st.title("🥛 Suivi Laitier")
+    subjects = get_all_subjects()
+    if not subjects:
+        st.warning("Aucun sujet.")
+        return
+    milk_species = ['ovin', 'bovin', 'caprin', 'camelin']
+    subject_options = {s['id']: f"{s['id']} - {SPECIES[s['species']]['name']} ({s['breed']})"
+                       for s in subjects if s['species'] in milk_species}
+    if not subject_options:
+        st.warning("Aucun animal laitier.")
+        return
+    selected_id = st.selectbox("Choisir un animal", options=list(subject_options.keys()),
+                               format_func=lambda x: subject_options[x])
+    tab1, tab2 = st.tabs(["📝 Saisir un relevé", "📈 Visualisation"])
+    with tab1:
+        date = st.date_input("Date")
+        quantity = st.number_input("Quantité (L)", min_value=0.0, step=0.1)
+        protein = st.number_input("Protéines (g/L)", min_value=0.0, step=0.1)
+        fat = st.number_input("Matière grasse (g/L)", min_value=0.0, step=0.1)
+        with st.expander("Paramètres avancés"):
+            dry_extract = st.number_input("Extrait sec (g/L)", min_value=0.0, step=0.1)
+            lactose = st.number_input("Lactose (g/L)", min_value=0.0, step=0.1)
+            ph = st.number_input("pH", min_value=0.0, max_value=14.0, step=0.1)
+            density = st.number_input("Densité", min_value=1.0, step=0.001, format="%.3f")
+            somatic_cells = st.number_input("Cellules somatiques (x1000/mL)", min_value=0, step=1)
+            acidity = st.number_input("Acidité Dornic (°D)", min_value=0.0, step=0.1)
+        notes = st.text_area("Notes")
+        if st.button("Enregistrer"):
+            record = {
+                'subject_id': selected_id,
+                'quantity_l': quantity,
+                'protein': protein,
+                'fat': fat,
+                'dry_extract': dry_extract,
+                'lactose': lactose,
+                'ph': ph,
+                'density': density,
+                'somatic_cells': somatic_cells,
+                'acidity': acidity,
+                'fatty_acids': {},
+                'notes': notes
+            }
+            add_milk_record(record)
+            st.success("Relevé enregistré !")
+    with tab2:
+        records = get_milk_records(selected_id)
+        if not records:
+            st.info("Aucun relevé.")
+        else:
+            df = pd.DataFrame(records)
+            df['date'] = pd.to_datetime(df['date'])
+            df = df.sort_values('date')
+            fig = px.line(df, x='date', y='quantity_l', title='Production laitière')
+            st.plotly_chart(fig)
+            comp_df = df[['date','protein','fat','lactose']].melt(id_vars='date', var_name='composant', value_name='taux')
+            fig2 = px.line(comp_df, x='date', y='taux', color='composant', title='Composition')
+            st.plotly_chart(fig2)
 
-    with tab_view:
-        st.subheader("Registre Actuel")
-        df_readable = st.session_state.db_data.rename(columns=LABEL_MAP)
-        st.write(f"Nombre d'individus en mémoire : **{len(df_readable)}**")
-        st.dataframe(df_readable, use_container_width=True)
-        
-        csv = df_readable.to_csv(index=False).encode('utf-8')
-        st.download_button("📥 Télécharger la base (CSV)", csv, f"BioGen_Export_{datetime.now().strftime('%Y%m%d')}.csv", "text/csv", use_container_width=True)
+# ---- biolab ----
+def calculate_gebv(subject, markers):
+    return 100 + (subject.get('weight_kg', 50) * 0.1)
 
-    with tab_import:
-        st.subheader("📥 Importation de fichiers externes")
-        uploaded_file = st.file_uploader("Charger un CSV ou Excel", type=['csv', 'xlsx'])
-        
-        if uploaded_file is not None:
-            try:
-                df_upload = pd.read_csv(uploaded_file) if uploaded_file.name.endswith('.csv') else pd.read_excel(uploaded_file)
-                st.write("🔍 Aperçu du fichier :")
-                st.dataframe(df_upload.head(3))
+def biolab_app():
+    st.title("🧬 Laboratoire Bio")
+    species_keys = list(SPECIES.keys())
+    species = st.selectbox("Espèce", species_keys, format_func=lambda x: f"{SPECIES[x]['icon']} {SPECIES[x]['name']}")
+    species_info = SPECIES[species]
+    st.subheader("Marqueurs d'intérêt")
+    if species_info['genetic_markers']:
+        st.dataframe(pd.DataFrame(species_info['genetic_markers']))
+    else:
+        st.info("Aucun marqueur.")
+    online = st.session_state.get('online', False)
+    if online:
+        st.success("Mode online : recherche NCBI simulée.")
+    st.subheader("Classement des élites")
+    subjects = [s for s in get_all_subjects() if s['species'] == species]
+    if not subjects:
+        st.warning("Aucun sujet de cette espèce.")
+        return
+    for s in subjects:
+        s['index'] = calculate_gebv(s, species_info['genetic_markers'])
+    df = pd.DataFrame(subjects).sort_values('index', ascending=False)
+    st.dataframe(df[['id','breed','gender','physiological_state','index']])
+    if not df.empty:
+        best = df.iloc[0]
+        st.subheader(f"Profil du meilleur : {best['id']}")
+        traits = {"Viande":80, "Lait":70, "Fertilité":90, "Santé":85}
+        fig = px.line_polar(r=list(traits.values()), theta=list(traits.keys()), line_close=True)
+        st.plotly_chart(fig)
 
-                if st.button("🔄 Fusionner avec la base"):
-                    st.session_state.db_data = pd.concat([st.session_state.db_data, df_upload], ignore_index=True)
-                    st.success("✅ Données fusionnées !")
-            except Exception as e:
-                st.error(f"Erreur : {e}")
+# ---- diagnosis ----
+def predict_offline(image, context):
+    return {"maladie": "Mammite", "probabilite": 0.78, "conseils": "Surveiller."}
+def predict_online(image, context):
+    return {"maladie": "Mammite clinique", "probabilite": 0.92, "conseils": "Traitement."}
 
-    with tab_clean:
-        st.subheader("🧹 Laboratoire de Nettoyage de Données")
-        st.write("Cet outil prépare vos données pour l'analyse statistique (ACP, ANOVA).")
-        
-        col_c1, col_c2 = st.columns(2)
-        
-        # Détection des problèmes
-        doublons = st.session_state.db_data.duplicated().sum()
-        valeurs_vides = st.session_state.db_data.isna().sum().sum()
-        
-        col_c1.metric("Doublons détectés", doublons)
-        col_c2.metric("Valeurs manquantes", valeurs_vides)
-        
-        if st.button("🚀 Lancer le Nettoyage Bio-Statistique"):
-            # 1. Suppression des doublons
-            st.session_state.db_data = st.session_state.db_data.drop_duplicates()
-            
-            # 2. Remplissage des valeurs vides par la moyenne (pour les chiffres)
-            num_cols = st.session_state.db_data.select_dtypes(include=[np.number]).columns
-            st.session_state.db_data[num_cols] = st.session_state.db_data[num_cols].fillna(st.session_state.db_data[num_cols].mean())
-            
-            # 3. Suppression des lignes vraiment vides
-            st.session_state.db_data = st.session_state.db_data.dropna(how='all')
-            
-            st.success("✨ Nettoyage terminé : Les données sont désormais prêtes pour l'ACP !")
+def diagnosis_app():
+    st.title("🔍 Diagnostic IA par Photo")
+    online = st.session_state.get('online', False)
+    st.caption(f"Mode : {'🌐 En ligne' if online else '📴 Hors ligne'}")
+    uploaded = st.file_uploader("Choisissez une photo", type=['jpg','jpeg','png'])
+    if uploaded:
+        image = Image.open(uploaded)
+        st.image(image, caption="Photo", use_column_width=True)
+        with st.expander("Informations contextuelles"):
+            species = st.selectbox("Espèce", ["Ovin","Bovin","Plante"])
+            physio = st.selectbox("État", ["normal","gestante","lactation"])
+        if st.button("Lancer le diagnostic"):
+            context = {"species": species, "physiological_state": physio}
+            result = predict_online(image, context) if online else predict_offline(image, context)
+            st.subheader("Résultat")
+            st.write(f"**Maladie** : {result['maladie']}")
+            st.write(f"**Probabilité** : {result['probabilite']*100:.1f}%")
+            st.info(f"**Conseils** : {result['conseils']}")
+
+# ---- carcass ----
+def carcass_app():
+    st.title("🥩 Estimation Carcasse")
+    method = st.radio("Méthode", ["Choisir un animal existant", "Saisie manuelle"])
+    if method == "Choisir un animal existant":
+        subjects = get_all_subjects()
+        meat_species = ['ovin','bovin','caprin','camelin','poulet_viande','lapin']
+        subjects = [s for s in subjects if s['species'] in meat_species]
+        if not subjects:
+            st.warning("Aucun animal à viande.")
+            return
+        opt = {s['id']: f"{s['id']} - {SPECIES[s['species']]['name']}" for s in subjects}
+        sel = st.selectbox("Sélectionner", options=list(opt.keys()), format_func=lambda x: opt[x])
+        subj = next(s for s in subjects if s['id']==sel)
+        live_weight = subj.get('weight_kg')
+        species = subj['species']
+        gender = subj['gender']
+        physio = subj['physiological_state']
+        age = subj['age_months']
+        bcs = 3.0
+    else:
+        species_keys = [k for k,v in SPECIES.items() if v['category']=='animal']
+        species = st.selectbox("Espèce", species_keys, format_func=lambda x: SPECIES[x]['name'])
+        gender = st.selectbox("Sexe", ["male","female"])
+        physio = st.selectbox("État", SPECIES[species].get('physiological_states',[]))
+        live_weight = st.number_input("Poids vif (kg)", min_value=0.1, step=0.1)
+        age = st.number_input("Âge (mois)", min_value=0, step=1)
+        bcs = st.slider("Note d'état corporel (1-5)", 1.0, 5.0, 3.0, 0.5)
+    if st.button("Estimer"):
+        species_info = SPECIES[species]
+        carcass_params = species_info.get('carcass')
+        if not carcass_params:
+            st.error("Pas de paramètres.")
+            return
+        formula_key = carcass_params.get('formula')
+        if formula_key in CARCASS_FORMULAS:
+            formula = CARCASS_FORMULAS[formula_key]
+            muscle = formula['muscle'](live_weight, bcs)
+            fat = formula['fat'](live_weight, bcs)
+            bone = formula['bone'](live_weight)
+        else:
+            muscle = live_weight * carcass_params['muscle_percent']
+            fat = live_weight * carcass_params['fat_percent']
+            bone = live_weight * carcass_params['bone_percent']
+        carcass_weight = muscle+fat+bone
+        dressing = carcass_weight/live_weight if live_weight>0 else 0
+        st.subheader("Résultats")
+        col1,col2,col3 = st.columns(3)
+        col1.metric("Poids carcasse", f"{carcass_weight:.1f} kg", f"{dressing*100:.1f}%")
+        col2.metric("Viande", f"{muscle:.1f} kg", f"{muscle/carcass_weight*100:.1f}%")
+        col3.metric("Gras", f"{fat:.1f} kg", f"{fat/carcass_weight*100:.1f}%")
+        st.metric("Os", f"{bone:.1f} kg", f"{bone/carcass_weight*100:.1f}%")
+        fig = go.Figure(data=[go.Pie(labels=["Viande","Gras","Os"], values=[muscle,fat,bone], hole=0.3)])
+        st.plotly_chart(fig)
+
+# ---- dashboard ----
+def dashboard_app():
+    st.title("📊 Tableau de Bord")
+    subjects = get_all_subjects()
+    if not subjects:
+        st.info("Aucune donnée.")
+        return
+    df = pd.DataFrame(subjects)
+    col1,col2,col3 = st.columns(3)
+    col1.metric("Total sujets", len(df))
+    col2.metric("Espèces", df['species'].nunique())
+    col3.metric("Âge moyen", f"{df['age_months'].mean():.1f} mois")
+    sp_counts = df['species'].value_counts().reset_index()
+    sp_counts.columns = ['species','count']
+    sp_counts['species'] = sp_counts['species'].map(lambda x: SPECIES.get(x,{}).get('name',x))
+    fig = px.bar(sp_counts, x='species', y='count', title="Effectifs par espèce")
+    st.plotly_chart(fig)
+    animal_df = df[df['species'].isin([k for k,v in SPECIES.items() if v['category']=='animal'])]
+    if not animal_df.empty:
+        state_counts = animal_df['physiological_state'].value_counts().reset_index()
+        state_counts.columns = ['state','count']
+        fig2 = px.pie(state_counts, values='count', names='state', title="États physiologiques")
+        st.plotly_chart(fig2)
+
+# ---- species management ----
+def species_management_app():
+    st.title("🐾 Gestion des Espèces (Référence)")
+    species_keys = list(SPECIES.keys())
+    species = st.selectbox("Choisir une espèce", species_keys,
+                           format_func=lambda x: f"{SPECIES[x]['icon']} {SPECIES[x]['name']}")
+    info = SPECIES[species]
+    st.subheader("Caractéristiques")
+    st.write(f"**Catégorie** : {info['category']}")
+    st.write(f"**Races** : {', '.join(info['breeds'])}")
+    st.write(f"**Stades** : {', '.join([ls['name'] for ls in info['life_stages']])}")
+    st.write(f"**États** : {', '.join(info.get('physiological_states',[]))}")
+    st.subheader("Mesures morphométriques")
+    for g, measures in info['morphometrics'].items():
+        if g != 'udder_measures':
+            st.markdown(f"**{g}**")
+            for m in measures:
+                st.write(f"- {m['label']} ({m['unit']})")
+    if 'udder_measures' in info['morphometrics']:
+        st.markdown("**Mesures mammaires**")
+        for m in info['morphometrics']['udder_measures']:
+            st.write(f"- {m['label']} ({m['unit']})")
+    if info.get('genetic_markers'):
+        st.subheader("Marqueurs génétiques")
+        st.dataframe(pd.DataFrame(info['genetic_markers']))
+
+# ------------------------------------------------------------
+# MAIN APP
+# ------------------------------------------------------------
+def main():
+    st.set_page_config(page_title="GenApAgiE", layout="wide")
+    init_db()
+    if "online" not in st.session_state:
+        st.session_state.online = check_internet()
+
+    with st.sidebar:
+        st.image("https://via.placeholder.com/150x50?text=GenApAgiE", width=150)
+        st.title("GENAPAGIE")
+        st.caption("Multi-Espèces Pro")
+        st.divider()
+        st.subheader("EXPLOITANT ACTIF")
+        st.text("Rahim")
+        st.subheader("ESPÈCE FILTRÉE")
+        species_filter = st.selectbox(
+            "",
+            ["Toutes les espèces"] + list(SPECIES.keys()),
+            format_func=lambda x: SPECIES[x]["name"] if x != "Toutes les espèces" else "Toutes les espèces"
+        )
+        st.session_state['species_filter'] = species_filter
+        st.divider()
+        online = st.session_state.online
+        st.caption(f"🌐 Connecté" if online else "📴 Hors ligne")
+        if st.button("Rafraîchir connexion"):
+            st.session_state.online = check_internet()
             st.rerun()
+        menu = [
+            "Tableau de Bord",
+            "Gestion des Espèces",
+            "Archives Globales",
+            "Analyse IA",
+            "Laboratoire Bio",
+            "Intelligence ML",
+            "Inventaire Local",
+            "Nutrition & Sol",
+            "Santé & Phytosanitaire",
+            "Reproduction & Semis",
+            "Production & Récolte",
+            "🥩 Estimation Carcasse",
+            "Exploitants",
+            "Aide & Partage"
+        ]
+        choice = st.radio("Menu", menu)
 
-    st.info("💡 **Argument de Soutenance :** Ce module intègre une étape de 'Data Cleaning'. Il garantit que les analyses multivariées ne sont pas faussées par des données manquantes ou redondantes, assurant ainsi la fiabilité scientifique des résultats.")
+    if choice == "Tableau de Bord":
+        dashboard_app()
+    elif choice == "Gestion des Espèces":
+        species_management_app()
+    elif choice == "Archives Globales":
+        st.title("Archives Globales - en développement")
+    elif choice == "Analyse IA":
+        biometry_app()
+    elif choice == "Laboratoire Bio":
+        biolab_app()
+    elif choice == "Intelligence ML":
+        st.title("Intelligence ML - utilisez Diagnostic IA")
+    elif choice == "Inventaire Local":
+        inventory_app()
+    elif choice == "Nutrition & Sol":
+        st.title("Nutrition & Sol - en développement")
+    elif choice == "Santé & Phytosanitaire":
+        st.title("Santé & Phytosanitaire - en développement")
+    elif choice == "Reproduction & Semis":
+        st.title("Reproduction & Semis - en développement")
+    elif choice == "Production & Récolte":
+        st.title("Production & Récolte - en développement")
+    elif choice == "🥩 Estimation Carcasse":
+        carcass_app()
+    elif choice == "Exploitants":
+        st.title("Exploitants - en développement")
+    elif choice == "Aide & Partage":
+        st.title("Aide & Partage - en développement")
+
+if __name__ == "__main__":
+    main()
