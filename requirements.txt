@@ -1,4 +1,7 @@
 streamlit
 pandas
 plotly
+requests
+Pillow
 numpy
+python-dotenv
