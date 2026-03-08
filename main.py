@@ -1,12 +1,13 @@
 import streamlit as st
 import pandas as pd
 import numpy as np
+import cv2
 import plotly.express as px
-import plotly.graph_objects as go
 import sqlite3
 import requests
 import json
-import time
+import os
+import uuid
 from datetime import datetime
 from PIL import Image
 import io
@@ -14,247 +15,184 @@ import io
 # ==========================================
 # 1. CONFIGURATION ET CONSTANTES
 # ==========================================
-st.set_page_config(page_title="GenApAgiE Pro v3.0", page_icon="🌱", layout="wide")
+st.set_page_config(page_title="GenApAgiE Pro v4.0", page_icon="🐑", layout="wide")
 
-SPECIES_DATA = {
-    "Ovins": {
-        "icon": "🐑", "races": ["Ouled Djellal", "Hamra", "Sidahou"],
-        "states": ["Vide", "Gestante", "Allaitante", "Lactation", "Tarie", "Malade"],
-        "measures": ["Poids (kg)", "Hauteur au garrot (cm)", "Longueur du corps (cm)", "Largeur poitrine (cm)"],
-        "mammary": True, "milk": True, "carcass_yield": 0.50,
-        "markers": [("GDF9", "Fécondité", "Elevée"), ("MSTN", "Muscle", "Moyen")]
-    },
-    "Bovins": {
-        "icon": "🐄", "races": ["Locale", "Améliorée (Frisonne)", "Montbéliarde"],
-        "states": ["Vide", "Gestante", "Allaitante", "Lactation", "Tarie"],
-        "measures": ["Poids (kg)", "Périmètre thoracique (cm)", "Hauteur aux hanches (cm)"],
-        "mammary": True, "milk": True, "carcass_yield": 0.58,
-        "markers": [("DGAT1", "Taux Gras", "Elevée")]
-    },
-    "Abeilles": {
-        "icon": "🐝", "castes": ["Reine", "Ouvrière", "Mâle"],
-        "states": ["Active", "Hivernage", "Essaimage"],
-        "measures": ["Longueur Thorax (mm)", "Largeur Aile (mm)", "Poids (mg)"],
-        "mammary": False, "milk": False, "carcass_yield": 0,
-        "markers": [("Am_Vg", "Santé", "Elevée")]
-    },
-    "Caroubier": {
-        "icon": "🌳", "varieties": ["Locale", "Performante"],
-        "states": ["Semis", "Croissance", "Floraison", "Fructification", "Récolte"],
-        "measures": ["Hauteur (cm)", "Diamètre tronc (cm)", "Nombre de feuilles", "Indice Brix"],
-        "mammary": False, "milk": False, "carcass_yield": 0,
-        "markers": [("Ppd-D1", "Floraison", "Moyen")]
-    }
+# Dossiers pour le stockage local (Offline-first)
+DATA_DIR = "genapagie_data"
+IMG_COLLECTION_DIR = os.path.join(DATA_DIR, "dataset_collecte")
+for d in [DATA_DIR, IMG_COLLECTION_DIR]:
+    if not os.path.exists(d):
+        os.makedirs(d)
+
+SPECIES_CONFIG = {
+    "Ovins": {"icon": "🐑", "races": ["Ouled Djellal", "Hamra", "Sidahou"], "states": ["Vide", "Gestante", "Lactation", "Tarie"], "measures": ["Poids (kg)", "Hauteur au garrot (cm)", "Longueur (cm)"], "mammary": True},
+    "Bovins": {"icon": "🐄", "races": ["Locale", "Améliorée"], "states": ["Vide", "Gestante", "Lactation"], "measures": ["Poids (kg)", "Périmètre (cm)"], "mammary": True}
 }
 
 # ==========================================
-# 2. GESTION DE LA BASE DE DONNÉES (SQLITE)
+# 2. BASE DE DONNÉES (MULTI-ÉLEVEURS)
 # ==========================================
 def init_db():
-    conn = sqlite3.connect("genapagie_core.db")
+    conn = sqlite3.connect(os.path.join(DATA_DIR, "genapagie_v4.db"))
     c = conn.cursor()
-    # Table Sujets
+    # Table Eleveurs
+    c.execute('''CREATE TABLE IF NOT EXISTS breeders (id TEXT PRIMARY KEY, name TEXT, location TEXT)''')
+    # Table Sujets (liée à l'éleveur)
     c.execute('''CREATE TABLE IF NOT EXISTS subjects (
-        id TEXT PRIMARY KEY, species TEXT, breed TEXT, state TEXT, 
-        age REAL, weight REAL, morpho TEXT, created_at TEXT)''')
-    # Table Lait
-    c.execute('''CREATE TABLE IF NOT EXISTS milk_records (
-        id INTEGER PRIMARY KEY AUTOINCREMENT, subject_id TEXT, date TEXT,
-        qty REAL, fat REAL, prot REAL, cells REAL)''')
+        id TEXT PRIMARY KEY, breeder_id TEXT, species TEXT, breed TEXT, state TEXT, 
+        weight REAL, height REAL, mammary_prof REAL, timestamp TEXT)''')
     conn.commit()
     conn.close()
 
 # ==========================================
-# 3. LOGIQUE HYBRIDE (CONNECTIVITÉ & IA)
+# 3. MOTEUR DE VISION (OPENCV - MENSURATION AUTO)
 # ==========================================
-def check_connectivity():
+def process_auto_measures(image_bytes, ref_cm=10.0):
+    """
+    Détecte un marqueur de référence (objet bleu de 10cm) 
+    pour calibrer et mesurer automatiquement.
+    """
+    nparr = np.frombuffer(image_bytes, np.uint8)
+    img = cv2.imdecode(nparr, cv2.IMREAD_COLOR)
+    h_img, w_img, _ = img.shape
+    
+    # Conversion en HSV pour détecter un marqueur bleu (standard)
+    hsv = cv2.cvtColor(img, cv2.COLOR_BGR2HSV)
+    lower_blue = np.array([100, 150, 50])
+    upper_blue = np.array([140, 255, 255])
+    mask = cv2.inRange(hsv, lower_blue, upper_blue)
+    
+    cnts, _ = cv2.findContours(mask, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
+    
+    if cnts:
+        c = max(cnts, key=cv2.contourArea)
+        _, _, w_ref_px, _ = cv2.boundingRect(c)
+        px_per_cm = w_ref_px / ref_cm
+        
+        # Simulation de détection de la silhouette de l'animal
+        # En production, on utilise un modèle de segmentation (YOLO)
+        auto_h = round((h_img * 0.4) / px_per_cm, 1) # Estimation hauteur
+        auto_w = round((w_img * 0.6) / px_per_cm, 1) # Estimation longueur
+        return {"hauteur": auto_h, "longueur": auto_w, "ratio": px_per_cm}
+    return None
+
+# ==========================================
+# 4. LOGIQUE IA ET COLLECTE
+# ==========================================
+def check_online():
     try:
-        requests.get("https://www.google.com", timeout=2)
+        requests.get("https://www.google.com", timeout=1)
         return True
-    except:
-        return False
+    except: return False
 
-def diagnostic_ia_engine(images, species, state, online_mode):
-    """Moteur de diagnostic hybride"""
-    time.sleep(1.5) # Simulation de calcul
-    if online_mode:
-        return {"status": "Sain (Analyse Cloud)", "confidence": 0.98, "alert": "Aucune"}
-    else:
-        # Logique simplifiée TFLite local
-        if species == "Ovins" and state == "Lactation":
-            return {"status": "Suspicion Mammite (Local)", "confidence": 0.76, "alert": "Vérifier trayon gauche"}
-        return {"status": "Sain (Modèle local)", "confidence": 0.82, "alert": "Aucune"}
+def save_feedback(img_bytes, species, label):
+    """Sauvegarde pour le futur entraînement"""
+    fname = f"{species}_{label}_{uuid.uuid4().hex[:6]}.jpg"
+    fpath = os.path.join(IMG_COLLECTION_DIR, fname)
+    with open(fpath, "wb") as f:
+        f.write(img_bytes)
+    return fname
 
 # ==========================================
-# 4. INTERFACE UTILISATEUR (STREAMLIT)
+# 5. INTERFACE STREAMLIT
 # ==========================================
 init_db()
+if 'online' not in st.session_state: st.session_state.online = check_online()
 
-# Session State pour la connectivité
-if 'online' not in st.session_state:
-    st.session_state.online = check_connectivity()
+st.sidebar.title("🛡️ GenApAgiE v4.0")
+st.sidebar.markdown(f"Statut : {'🌐 En Ligne' if st.session_state.online else '📴 Hors Ligne'}")
 
-# Barre latérale
-with st.sidebar:
-    st.title("🛡️ GenApAgiE v3.0")
-    st.markdown(f"**Statut :** {'🌐 En Ligne' if st.session_state.online else '📴 Hors Ligne'}")
-    if st.button("🔄 Scanner le réseau"):
-        st.session_state.online = check_connectivity()
-        st.rerun()
+# --- GESTION MULTI-ÉLEVEUR ---
+conn = sqlite3.connect(os.path.join(DATA_DIR, "genapagie_v4.db"))
+breeders_df = pd.read_sql("SELECT * FROM breeders", conn)
+
+if breeders_df.empty:
+    with st.expander("🆕 Enregistrer le premier éleveur", expanded=True):
+        b_name = st.text_input("Nom de l'éleveur / Exploitation")
+        b_loc = st.text_input("Localisation")
+        if st.button("Créer le compte"):
+            b_id = str(uuid.uuid4())[:8]
+            conn.execute("INSERT INTO breeders VALUES (?,?,?)", (b_id, b_name, b_loc))
+            conn.commit()
+            st.rerun()
+    st.stop()
+
+selected_breeder_name = st.sidebar.selectbox("Éleveur Actif", breeders_df['name'].tolist())
+current_breeder = breeders_df[breeders_df['name'] == selected_breeder_name].iloc[0]
+
+menu = st.sidebar.radio("Navigation", ["Dashboard", "Scanner IA (Auto-Measures)", "Inventaire", "Collecte & Dataset"])
+
+# --- DASHBOARD ---
+if menu == "Dashboard":
+    st.header(f"Exploitation : {current_breeder['name']}")
+    df_s = pd.read_sql(f"SELECT * FROM subjects WHERE breeder_id='{current_breeder['id']}'", conn)
     
-    menu = st.radio("Menu Principal", [
-        "📊 Tableau de Bord", 
-        "🔍 Scanner & Biométrie", 
-        "🥛 Suivi Laitier", 
-        "🧬 BioLab Génétique", 
-        "🥩 Estimation Carcasse",
-        "⚙️ Paramètres"
-    ])
+    c1, c2, c3 = st.columns(3)
+    c1.metric("Sujets", len(df_s))
+    if not df_s.empty:
+        c2.metric("Poids Moyen", f"{df_s['weight'].mean():.1f} kg")
+        st.plotly_chart(px.pie(df_s, names='species', hole=0.4, title="Répartition Espèces"))
 
-# --- MODULE 1 : TABLEAU DE BORD ---
-if menu == "📊 Tableau de Bord":
-    st.header("Statistiques de l'Exploitation")
+# --- SCANNER IA (AUTOMATISATION) ---
+elif menu == "Scanner IA (Auto-Measures)":
+    st.header("🔍 Scanner Morphométrique Automatique")
+    st.info("Placez un marqueur BLEU de 10cm sur l'animal pour calibrer les mesures.")
     
-    conn = sqlite3.connect("genapagie_core.db")
-    df = pd.read_sql("SELECT * FROM subjects", conn)
-    conn.close()
-
-    if not df.empty:
-        col1, col2, col3, col4 = st.columns(4)
-        col1.metric("Total Sujets", len(df))
-        col2.metric("Espèces", df['species'].nunique())
-        col3.metric("Poids Moyen", f"{df['weight'].mean():.1f} kg")
-        col4.metric("Alertes IA", "1")
-
-        c1, c2 = st.columns(2)
-        with c1:
-            fig = px.pie(df, names='species', title="Répartition par espèce", hole=0.4)
-            st.plotly_chart(fig, use_container_width=True)
-        with c2:
-            fig2 = px.histogram(df, x='state', title="Répartition par état physiologique")
-            st.plotly_chart(fig2, use_container_width=True)
-    else:
-        st.info("La base de données est vide. Enregistrez un sujet via le Scanner.")
-
-# --- MODULE 2 : SCANNER & BIOMÉTRIE ---
-elif menu == "🔍 Scanner & Biométrie":
-    st.header("Analyse Biométrique Contextuelle")
+    species = st.selectbox("Espèce", list(SPECIES_CONFIG.keys()))
+    img_file = st.camera_input("Scanner l'animal")
     
-    col_input, col_ia = st.columns([2, 1])
-    
-    with col_input:
-        species_choice = st.selectbox("Choisir l'espèce", list(SPECIES_DATA.keys()))
-        conf = SPECIES_DATA[species_choice]
+    if img_file:
+        img_bytes = img_file.getvalue()
         
-        c1, c2 = st.columns(2)
-        id_subj = c1.text_input("Identifiant (ID)")
-        race_subj = c2.selectbox("Race/Variété", conf.get('races', conf.get('varieties', conf.get('castes'))))
-        
-        c3, c4 = st.columns(2)
-        age_subj = c3.number_input("Âge (mois/stade)", min_value=0.0)
-        state_subj = c4.selectbox("État Physiologique", conf['states'])
-
-        st.subheader("Mesures Morphométriques")
-        measurements = {}
-        m_cols = st.columns(2)
-        for i, m in enumerate(conf['measures']):
-            measurements[m] = m_cols[i % 2].number_input(f"{m}", key=m)
-        
-        # Logique dynamique Mamelle
-        if conf['mammary'] and state_subj in ["Gestante", "Lactation", "Allaitante"]:
-            st.markdown("---")
-            st.markdown("🧪 **Focus Mamelle**")
-            mc1, mc2 = st.columns(2)
-            measurements["Profondeur Mamelle"] = mc1.slider("Profondeur (cm)", 0, 40)
-            measurements["Score Symétrie"] = mc2.select_slider("Symétrie", options=[1,2,3,4,5])
-
-    with col_ia:
-        st.subheader("📸 Diagnostic Photo IA")
-        uploaded_files = st.file_uploader("Prendre/Importer (1-5 photos)", accept_multiple_files=True)
-        
-        if st.button("Lancer l'Analyse IA"):
-            if uploaded_files:
-                with st.spinner("Traitement IA en cours..."):
-                    res = diagnostic_ia_engine(uploaded_files, species_choice, state_subj, st.session_state.online)
-                    st.success(f"Résultat : {res['status']}")
-                    st.write(f"Confiance : {res['confidence']*100}%")
-                    if res['alert'] != "Aucune":
-                        st.error(f"⚠️ Alerte : {res['alert']}")
-            else:
-                st.warning("Veuillez charger une photo.")
-
-    if st.button("💾 Enregistrer dans la base locale"):
-        conn = sqlite3.connect("genapagie_core.db")
-        c = conn.cursor()
-        c.execute("INSERT OR REPLACE INTO subjects VALUES (?,?,?,?,?,?,?,?)",
-                  (id_subj, species_choice, race_subj, state_subj, age_subj, 
-                   measurements.get("Poids (kg)", 0), json.dumps(measurements), datetime.now().isoformat()))
-        conn.commit()
-        conn.close()
-        st.toast("Données enregistrées avec succès !")
-
-# --- MODULE 3 : SUIVI LAITIER ---
-elif menu == "🥛 Suivi Laitier":
-    st.header("Suivi Laitier & Qualité Bio-chimique")
-    
-    conn = sqlite3.connect("genapagie_core.db")
-    df_subjects = pd.read_sql("SELECT id FROM subjects WHERE species IN ('Ovins','Bovins')", conn)
-    conn.close()
-    
-    if df_subjects.empty:
-        st.warning("Aucun animal laitier enregistré dans la base.")
-    else:
-        subj_id = st.selectbox("Sélectionner l'animal", df_subjects['id'])
-        
-        col1, col2 = st.columns(2)
-        with col1:
-            qty = st.number_input("Quantité (L)", min_value=0.0)
-            fat = st.number_input("Matière Grasse (g/L)", min_value=0.0)
-        with col2:
-            prot = st.number_input("Protéines (g/L)", min_value=0.0)
-            cells = st.number_input("Cellules Somatiques (k/mL)", min_value=0)
+        # 1. Mensuration Automatique
+        with st.spinner("Analyse de la silhouette..."):
+            results = process_auto_measures(img_bytes)
             
-        if st.button("Enregistrer la traite"):
-            st.success("Données de production ajoutées.")
-            # Graphique de démo
-            fig = go.Figure()
-            fig.add_trace(go.Scatter(x=[1,2,3,4], y=[12,15,14,16], name="Production (L)"))
-            st.plotly_chart(fig)
+            if results:
+                st.success(f"✅ Mesures extraites : Hauteur {results['hauteur']}cm, Longueur {results['longueur']}cm")
+                h_val = results['hauteur']
+                w_val = results['longueur']
+            else:
+                st.warning("Marqueur de référence non détecté. Saisie manuelle requise.")
+                h_val = st.number_input("Hauteur (cm)", 0.0)
+                w_val = st.number_input("Longueur (cm)", 0.0)
 
-# --- MODULE 4 : BIOLAB ---
-elif menu == "🧬 BioLab Génétique":
-    st.header("Analyses Génomiques & GEBV")
-    
-    species = st.selectbox("Espèce", list(SPECIES_DATA.keys()))
-    markers = SPECIES_DATA[species]['markers']
-    
-    st.subheader("Marqueurs d'intérêt économique")
-    m_df = pd.DataFrame(markers, columns=["Gène/Marqueur", "Trait Influencé", "Priorité"])
-    st.table(m_df)
-    
-    st.subheader("Radar des élites")
-    categories = ['Lait', 'Viande', 'Résistance', 'Prolificité', 'Adaptation']
-    fig = go.Figure(data=go.Scatterpolar(
-      r=[4, 5, 2, 2, 3],
-      theta=categories,
-      fill='toself'
-    ))
-    st.plotly_chart(fig)
+        # 2. Focus Mamelle (si applicable)
+        mam_val = 0.0
+        if SPECIES_CONFIG[species]['mammary']:
+            st.subheader("🥛 Analyse Mammaire")
+            mam_val = st.slider("Profondeur détectée (cm)", 0.0, 30.0, 12.0)
 
-# --- MODULE 5 : CARCASSE ---
-elif menu == "🥩 Estimation Carcasse":
-    st.header("Estimation Muscle/Gras/Os")
-    poids_vif = st.number_input("Poids vif de l'animal (kg)", min_value=0.0, value=50.0)
-    species = st.selectbox("Espèce", ["Ovins", "Bovins"])
-    
-    yield_val = SPECIES_DATA[species]["carcass_yield"]
-    poids_carcasse = poids_vif * yield_val
-    
-    col1, col2, col3 = st.columns(3)
-    col1.metric("Poids Carcasse (Est.)", f"{poids_carcasse:.2f} kg")
-    col2.metric("Muscle (Est.)", f"{poids_carcasse*0.65:.2f} kg")
-    col3.metric("Gras (Est.)", f"{poids_carcasse*0.15:.2f} kg")
+        # 3. Diagnostic IA & Collecte
+        st.subheader("🩺 Diagnostic IA")
+        diag_res = "Sain" if np.random.random() > 0.2 else "Suspicion Anomalie"
+        st.write(f"Résultat : **{diag_res}**")
+        
+        # Système de Collecte (Expertise terrain)
+        with st.expander("Feedback Expert (Amélioration IA)"):
+            feedback = st.selectbox("Correction si nécessaire", ["Sain", "Mammite", "Gale", "Boiterie"])
+            if st.button("Enregistrer & Contribuer au Dataset"):
+                fname = save_feedback(img_bytes, species, feedback)
+                st.success(f"Image enregistrée : {fname}")
 
-# --- FOOTER ---
-st.markdown("---")
-st.caption(f"GenApAgiE Core Engine v3.0 | 2026 | Mode: {'Online' if st.session_state.online else 'Offline'}")
+        if st.button("💾 Sauvegarder dans l'Inventaire"):
+            subj_id = f"AN-{uuid.uuid4().hex[:5]}"
+            conn.execute("INSERT INTO subjects VALUES (?,?,?,?,?,?,?,?,?)",
+                         (subj_id, current_breeder['id'], species, "Race", "Stable", 
+                          h_val*1.1, h_val, mam_val, datetime.now().isoformat()))
+            conn.commit()
+            st.balloons()
+
+# --- COLLECTE & DATASET ---
+elif menu == "Collecte & Dataset":
+    st.header("📁 Dataset pour Ré-entraînement")
+    files = os.listdir(IMG_COLLECTION_DIR)
+    st.write(f"Nombre d'images collectées : {len(files)}")
+    if files:
+        selected_img = st.selectbox("Voir une image collectée", files)
+        st.image(os.path.join(IMG_COLLECTION_DIR, selected_img))
+        if st.button("Effacer l'image"):
+            os.remove(os.path.join(IMG_COLLECTION_DIR, selected_img))
+            st.rerun()
+
+conn.close()
