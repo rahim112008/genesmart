@@ -6,3 +6,12 @@ Pillow
 numpy
 python-dotenv
 opencv-python-headless
+scipy
+statsmodels
+openpyxl
+xlsxwriter
+scikit-learn
+joblib
+ydata-profiling
+streamlit-pandas-profiling
+python-dotenv  
