@@ -1843,20 +1843,20 @@ def page_analyse():
                 st.session_state['attache'] = attache_px
                 st.session_state['symetrie'] = symetrie
 
-        # Saisie manuelle mamelles (clés déjà uniques)
+                # Saisie manuelle mamelles (clés déjà uniques)
         st.subheader("📏 Saisie manuelle mamelles")
         col1, col2 = st.columns(2)
         with col1:
             long_trayon = st.number_input(
                 "Longueur trayon (cm)",
                 min_value=1.0, max_value=15.0,
-                value=st.session_state.get('long_trayon_g', 5.0),
+                value=max(1.0, min(15.0, st.session_state.get('long_trayon_g', 5.0))),
                 key="long_trayon_mamelle_input"
             )
             diam_trayon = st.number_input(
                 "Diamètre trayon (cm)",
                 min_value=0.5, max_value=5.0,
-                value=st.session_state.get('diam_trayon', 2.5),
+                value=max(0.5, min(5.0, st.session_state.get('diam_trayon', 2.5))),
                 key="diam_trayon_mamelle_input"
             )
         with col2:
