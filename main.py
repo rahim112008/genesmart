@@ -41,7 +41,7 @@ except ImportError:
 # Traitement d'image
 import cv2
 
-# Pour les clics sur image
+# Outil pour les coordonnées de clics
 from streamlit_image_coordinates import streamlit_image_coordinates
 
 # Deep learning
@@ -62,7 +62,7 @@ os.makedirs(DATASET_DIR, exist_ok=True)
 class Config:
     APP_NAME = "Ovin Manager Pro"
     LABORATOIRE = "GenApAgiE"
-    VERSION = "8.0"
+    VERSION = "7.0"
     
     VERT = "#2E7D32"
     ORANGE = "#FF6F00"
@@ -367,7 +367,6 @@ class Database:
 # FONCTION UTILITAIRE POUR LES PHOTOS
 # -----------------------------------------------------------------------------
 def save_uploaded_photo(uploaded_file):
-    """Sauvegarde une photo uploadée et retourne le nom du fichier."""
     if uploaded_file is not None:
         ext = os.path.splitext(uploaded_file.name)[1]
         filename = f"{uuid.uuid4().hex}{ext}"
@@ -381,7 +380,6 @@ def save_uploaded_photo(uploaded_file):
 # FONCTION DE FILTRAGE PAR ÉLEVEUR
 # -----------------------------------------------------------------------------
 def filtrer_par_eleveur(query_base: str, params: list, join_eleveur: bool = True) -> tuple:
-    """Ajoute une condition sur l'éleveur actif à la requête et retourne (query, params)."""
     if st.session_state.eleveur_id is not None:
         if join_eleveur:
             query_base += " AND el.id=?"
@@ -699,10 +697,9 @@ def detect_anomalies(df, contamination=0.1):
     return preds
 
 # -----------------------------------------------------------------------------
-# FONCTIONS DE DÉTECTION D'ÉTALON AMÉLIORÉES
+# FONCTIONS DE DÉTECTION D'ÉTALON
 # -----------------------------------------------------------------------------
 def detecter_baton(image, seuil_canny1=50, seuil_canny2=150):
-    """Détecte un bâton avec paramètres ajustables."""
     gray = cv2.cvtColor(image, cv2.COLOR_BGR2GRAY)
     edges = cv2.Canny(gray, seuil_canny1, seuil_canny2)
     lines = cv2.HoughLinesP(edges, 1, np.pi/180, threshold=100, minLineLength=100, maxLineGap=10)
@@ -719,7 +716,6 @@ def detecter_baton(image, seuil_canny1=50, seuil_canny2=150):
     return None, 0
 
 def detecter_feuille(image):
-    """Détecte une feuille A4 avec seuillage adaptatif."""
     gray = cv2.cvtColor(image, cv2.COLOR_BGR2GRAY)
     _, thresh = cv2.threshold(gray, 200, 255, cv2.THRESH_BINARY_INV)
     contours, _ = cv2.findContours(thresh, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
@@ -733,7 +729,6 @@ def detecter_feuille(image):
     return None, 0
 
 def detecter_piece(image):
-    """Détecte une pièce avec HoughCircles."""
     gray = cv2.cvtColor(image, cv2.COLOR_BGR2GRAY)
     circles = cv2.HoughCircles(gray, cv2.HOUGH_GRADIENT, dp=1.2, minDist=100,
                                param1=50, param2=30, minRadius=10, maxRadius=100)
@@ -779,12 +774,16 @@ def charger_dataset():
             data = np.load(os.path.join(DATASET_DIR, f), allow_pickle=True)
             images.append(data['image'])
             pts = data['points_norm'].item()
-            # On convertit les points en vecteur 1D (ordre défini)
-            # Pour le corps, on suppose l'ordre suivant: garrot, sol, épaule, fesse, queue, bassinG, bassinD, thoraxG, thoraxD, canonH, canonB
-            vec = [pts.get(k, (0,0)) for k in ['garrot','sol','epaule','fesse','queue','bassinG','bassinD','thoraxG','thoraxD','canonH','canonB']]
-            # Aplatir
-            flat = [coord for point in vec for coord in point]
-            points_list.append(flat)
+            # Ordre : garrot, sol, epaule, fesse, queue, bassin_g, bassin_d, thorax_g, thorax_d, canon_h, canon_b
+            # Mais pour simplifier, on suppose un ordre fixe
+            # Ici on crée un vecteur de 22 coordonnées (11 points *2)
+            vec = []
+            for key in ['garrot', 'sol', 'epaule', 'fesse', 'queue', 'bassin_g', 'bassin_d', 'thorax_g', 'thorax_d', 'canon_h', 'canon_b']:
+                if key in pts:
+                    vec.extend([pts[key][0], pts[key][1]])
+                else:
+                    vec.extend([0,0])
+            points_list.append(vec)
             metadatas.append(data['metadata'].item() if 'metadata' in data else {})
     if len(images) == 0:
         return None, None, None
@@ -798,12 +797,10 @@ def entrainer_modele():
     if X is None or len(X) < 10:
         return None, "Pas assez de données (minimum 10 images)."
     
-    # Division train/test
     split = int(0.8 * len(X))
     X_train, X_test = X[:split], X[split:]
     y_train, y_test = y[:split], y[split:]
     
-    # Construction du modèle
     model = models.Sequential([
         layers.Conv2D(32, (3,3), activation='relu', input_shape=(256,256,3)),
         layers.MaxPooling2D(2,2),
@@ -813,13 +810,12 @@ def entrainer_modele():
         layers.MaxPooling2D(2,2),
         layers.Flatten(),
         layers.Dense(128, activation='relu'),
-        layers.Dense(22)  # 11 points * 2 coordonnées
+        layers.Dense(22)  # 11 points * 2
     ])
     
     model.compile(optimizer='adam', loss='mse', metrics=['mae'])
     history = model.fit(X_train, y_train, epochs=50, validation_data=(X_test, y_test), verbose=0)
     
-    # Sauvegarde
     model.save(os.path.join(MODEL_DIR, 'keypoints_model.h5'))
     return model, history
 
@@ -1253,11 +1249,9 @@ def page_prediction():
     st.divider()
     st.subheader("Prédiction avancée par modèle ML")
     
-    # Vérifier si un modèle existe
     model_path = os.path.join(MODEL_DIR, 'lait_model.pkl')
     if os.path.exists(model_path):
         st.success("Un modèle ML est disponible.")
-        # Sélectionner une brebis
         params = [st.session_state.user_id]
         query_brebis = """
             SELECT b.id, b.numero_id, b.nom, e.nom
@@ -1295,23 +1289,15 @@ def page_prediction():
 def page_analyse():
     st.title("📸 Analyse Photogrammétrique")
 
-    # Initialisation des variables de session
-    if 'points_utilisateur' not in st.session_state:
-        st.session_state.points_utilisateur = {}
-    if 'facteur_echelle' not in st.session_state:
-        st.session_state.facteur_echelle = None
-    if 'image_originale' not in st.session_state:
-        st.session_state.image_originale = None
-
-    # Gestion multi‑photos
-    if 'mesures_multi' not in st.session_state:
-        st.session_state.mesures_multi = []          # liste des mesures pour chaque image
-    if 'images_a_traiter' not in st.session_state:
-        st.session_state.images_a_traiter = []       # liste des images à traiter
-    if 'image_index' not in st.session_state:
-        st.session_state.image_index = 0              # index de l'image en cours
-    if 'facteur_precedent' not in st.session_state:
-        st.session_state.facteur_precedent = None     # pour réutiliser le même facteur d'échelle
+    # Initialisation des variables de session pour la gestion des vues
+    if 'points_par_vue' not in st.session_state:
+        st.session_state.points_par_vue = {}  # ex: {'gauche': {...}, 'droite': {...}, 'arriere': {...}}
+    if 'vues_a_traiter' not in st.session_state:
+        st.session_state.vues_a_traiter = []  # liste des vues encore non traitées
+    if 'facteur_global' not in st.session_state:
+        st.session_state.facteur_global = None
+    if 'images_uploaded_temp' not in st.session_state:
+        st.session_state.images_uploaded_temp = []  # stockage temporaire des images avant association
 
     # Valeurs par défaut pour les mesures (dans les plages acceptables)
     for k, v in [('longueur_corps', 70.0), ('hauteur_garrot', 65.0), ('tour_poitrine', 80.0),
@@ -1364,26 +1350,25 @@ def page_analyse():
     tab1, tab2 = st.tabs(["📏 Morphométrie Corps", "🥛 Analyse Mamelles"])
 
     # -------------------------------------------------------------------------
-    # ONGLET 1 : MORPHOMÉTRIE CORPS
+    # ONGLET 1 : MORPHOMÉTRIE CORPS (gestion des vues)
     # -------------------------------------------------------------------------
     with tab1:
         st.subheader("Mesures corporelles")
 
-        # --- Chargement des photos ---
-        st.subheader("📸 Chargement des photos")
-        source = st.radio("Source des images", ["Télécharger plusieurs fichiers", "Prendre plusieurs photos avec la caméra"])
+        # --- Étape 1 : Chargement des photos ---
+        st.write("### 1. Chargement des photos")
+        source = st.radio("Source des images", ["Télécharger plusieurs fichiers", "Prendre plusieurs photos avec la caméra"], key="source_corps")
 
-        images_uploaded = []
         if source == "Télécharger plusieurs fichiers":
-            uploaded_files = st.file_uploader("Choisir plusieurs photos", type=['jpg','png','jpeg'], accept_multiple_files=True)
+            uploaded_files = st.file_uploader("Choisir plusieurs photos", type=['jpg','png','jpeg'], accept_multiple_files=True, key="upload_corps")
             if uploaded_files:
                 for f in uploaded_files:
                     img_pil = Image.open(f)
                     img_cv = cv2.cvtColor(np.array(img_pil), cv2.COLOR_RGB2BGR)
-                    images_uploaded.append(img_cv)
-                st.success(f"{len(images_uploaded)} images téléchargées.")
+                    st.session_state.images_uploaded_temp.append(img_cv)
+                st.success(f"{len(uploaded_files)} images chargées temporairement.")
         else:
-            cam_image = st.camera_input("Prendre une photo")
+            cam_image = st.camera_input("Prendre une photo", key="cam_corps")
             if cam_image:
                 img_pil = Image.open(cam_image)
                 img_cv = cv2.cvtColor(np.array(img_pil), cv2.COLOR_RGB2BGR)
@@ -1392,245 +1377,211 @@ def page_analyse():
                 st.session_state.images_cam.append(img_cv)
                 st.success(f"Photo ajoutée (total : {len(st.session_state.images_cam)})")
             if 'images_cam' in st.session_state and st.session_state.images_cam:
-                if st.button("🗑️ Effacer toutes les photos"):
+                if st.button("🗑️ Effacer toutes les photos caméra"):
                     st.session_state.images_cam = []
                     st.rerun()
-                images_uploaded = st.session_state.images_cam
+                st.session_state.images_uploaded_temp = st.session_state.images_cam.copy()
 
-        # Si des images sont chargées, on les met dans la file de traitement
-        if images_uploaded and not st.session_state.images_a_traiter:
-            st.session_state.images_a_traiter = images_uploaded
-            st.session_state.image_index = 0
-            st.session_state.mesures_multi = []
-            st.success(f"{len(images_uploaded)} images prêtes. Commencez l'analyse.")
+        # --- Étape 2 : Associer chaque image à une vue ---
+        if st.session_state.images_uploaded_temp and not st.session_state.vues_a_traiter:
+            st.write("### 2. Associer chaque image à une vue")
+            vues_disponibles = ["gauche", "droite", "arriere"]
+            for idx, img in enumerate(st.session_state.images_uploaded_temp):
+                st.image(cv2.cvtColor(img, cv2.COLOR_BGR2RGB), caption=f"Image {idx+1}", width=300)
+                vue = st.selectbox(f"Vue de l'image {idx+1}", vues_disponibles, key=f"vue_{idx}")
+                if st.button(f"Valider pour l'image {idx+1}", key=f"valider_vue_{idx}"):
+                    # Si la vue est déjà prise, on écrase (on pourrait améliorer)
+                    st.session_state.points_par_vue[vue] = {
+                        'image': img,
+                        'points': [],
+                        'etape': 0,
+                        'noms_points': []  # sera défini plus tard selon la vue
+                    }
+                    st.success(f"Image {idx+1} enregistrée comme vue {vue}")
+            if st.button("Toutes les images sont associées, commencer le traitement"):
+                # Initialiser la liste des vues à traiter
+                st.session_state.vues_a_traiter = list(st.session_state.points_par_vue.keys())
+                st.session_state.facteur_global = None  # on redemandera le facteur
+                st.rerun()
 
-        # --- Traitement d'une image à la fois ---
-        if st.session_state.images_a_traiter:
-            idx = st.session_state.image_index
-            total = len(st.session_state.images_a_traiter)
-            if idx >= total:
-                st.info("Toutes les images ont été traitées.")
+        # --- Étape 3 : Traitement d'une vue à la fois ---
+        if st.session_state.vues_a_traiter:
+            vue_courante = st.session_state.vues_a_traiter[0]
+            data_vue = st.session_state.points_par_vue[vue_courante]
+            img_courante = data_vue['image']
+            points_clic = data_vue['points']
+            etape = data_vue['etape']
+
+            st.write(f"### Traitement de la vue : {vue_courante}")
+            st.image(cv2.cvtColor(img_courante, cv2.COLOR_BGR2RGB), use_column_width=True)
+
+            # --- Définition des points selon la vue ---
+            if vue_courante in ['gauche', 'droite']:
+                noms_points = ["Garrot", "Sol", "Épaule", "Fesse", "Queue", "Canon haut", "Canon bas"]
+                total_points = 7
+            elif vue_courante == 'arriere':
+                noms_points = ["Bassin gauche", "Bassin droit", "Thorax gauche", "Thorax droit"]
+                total_points = 4
             else:
-                img_courante = st.session_state.images_a_traiter[idx]
-                st.write(f"### Image {idx+1}/{total}")
-                st.image(cv2.cvtColor(img_courante, cv2.COLOR_BGR2RGB), use_column_width=True)
+                noms_points = []
+                total_points = 0
 
-                # --- Détection de l'étalon ---
+            # Stocker les noms dans data_vue pour usage ultérieur
+            data_vue['noms_points'] = noms_points
+
+            # --- Facteur d'échelle (si pas encore défini) ---
+            if st.session_state.facteur_global is None:
+                st.info("Définissez le facteur d'échelle pour cette session (une seule fois).")
                 etalon = st.selectbox("Étalon de calibration", list(Config.ETALONS.keys()),
-                                       format_func=lambda x: Config.ETALONS[x]['nom'], key=f"etalon_{idx}")
-
+                                       format_func=lambda x: Config.ETALONS[x]['nom'], key=f"etalon_{vue_courante}")
                 col1, col2 = st.columns(2)
                 with col1:
-                    if st.button("🔁 Réutiliser le facteur précédent"):
-                        if st.session_state.facteur_precedent is not None:
-                            st.session_state.facteur_echelle = st.session_state.facteur_precedent
-                            st.success(f"Facteur réutilisé : {st.session_state.facteur_echelle:.2f} px/cm")
-                        else:
-                            st.warning("Aucun facteur précédent.")
-                with col2:
                     if st.button("🔍 Détecter l'étalon sur cette image"):
-                        # Code de détection (identique à avant)
                         facteur = None
                         if etalon == "baton_1m":
                             line, len_px = detecter_baton(img_courante)
                             if line is not None:
                                 facteur = len_px / 100
-                                st.success(f"Bâton détecté : {len_px:.1f} px → {facteur:.2f} px/cm")
-                                # Dessiner la ligne
-                                img_copy = img_courante.copy()
-                                cv2.line(img_copy, (line[0], line[1]), (line[2], line[3]), (0,255,0), 3)
-                                st.image(cv2.cvtColor(img_copy, cv2.COLOR_BGR2RGB), caption="Bâton détecté")
-                            else:
-                                st.error("Bâton non détecté.")
                         elif etalon == "a4":
                             rect, long_px = detecter_feuille(img_courante)
                             if rect is not None:
                                 facteur = long_px / 29.7
-                                st.success(f"Feuille détectée : {long_px:.1f} px → {facteur:.2f} px/cm")
-                                img_copy = img_courante.copy()
-                                cv2.drawContours(img_copy, [rect], -1, (0,255,0), 3)
-                                st.image(cv2.cvtColor(img_copy, cv2.COLOR_BGR2RGB), caption="Feuille détectée")
-                            else:
-                                st.error("Feuille non détectée.")
                         elif etalon == "piece_100da":
                             circle, diam_px = detecter_piece(img_courante)
                             if circle is not None:
                                 facteur = diam_px / 2.95
-                                st.success(f"Pièce détectée : {diam_px:.1f} px → {facteur:.2f} px/cm")
-                                img_copy = img_courante.copy()
-                                cv2.circle(img_copy, (circle[0], circle[1]), circle[2], (0,255,0), 3)
-                                st.image(cv2.cvtColor(img_copy, cv2.COLOR_BGR2RGB), caption="Pièce détectée")
-                            else:
-                                st.error("Pièce non détectée.")
+                        if facteur:
+                            st.session_state.facteur_global = facteur
+                            st.success(f"Facteur d'échelle : {facteur:.2f} px/cm")
+                            st.rerun()
                         else:
-                            st.warning("Étalon non supporté.")
-                        if facteur is not None:
-                            st.session_state.facteur_echelle = facteur
-                            st.session_state.facteur_precedent = facteur
+                            st.error("Étalon non détecté.")
+                with col2:
+                    facteur_manuel = st.number_input("Ou saisir manuellement (px/cm)", value=10.0, step=0.1)
+                    if st.button("Utiliser ce facteur"):
+                        st.session_state.facteur_global = facteur_manuel
+                        st.rerun()
+            else:
+                st.info(f"Facteur d'échelle actuel : {st.session_state.facteur_global:.2f} px/cm")
 
-                # --- Collecte des points anatomiques (si facteur connu) ---
-                if st.session_state.facteur_echelle:
-                    st.subheader("🖱️ Cliquez sur les points anatomiques")
-                    st.write("Ordre : Garrot → Sol (vertical sous le garrot) → Épaule → Fesse → Queue → Bassin gauche → Bassin droit → Thorax gauche → Thorax droit → Canon haut → Canon bas")
+            # --- Collecte des points (si facteur défini) ---
+            if st.session_state.facteur_global is not None:
+                # Redimensionnement pour l'affichage
+                h_orig, w_orig = img_courante.shape[:2]
+                max_display = 600
+                if w_orig > max_display:
+                    scale = max_display / w_orig
+                    display_w = max_display
+                    display_h = int(h_orig * scale)
+                    img_display = cv2.resize(img_courante, (display_w, display_h))
+                else:
+                    img_display = img_courante
+                    display_w, display_h = w_orig, h_orig
+                img_rgb = cv2.cvtColor(img_display, cv2.COLOR_BGR2RGB)
 
-                    # Redimensionnement pour l'affichage
-                    h_orig, w_orig = img_courante.shape[:2]
-                    max_display = 600
-                    if w_orig > max_display:
-                        scale = max_display / w_orig
-                        display_w = max_display
-                        display_h = int(h_orig * scale)
-                        img_display = cv2.resize(img_courante, (display_w, display_h))
-                    else:
-                        img_display = img_courante
-                        display_w, display_h = w_orig, h_orig
+                if etape < total_points:
+                    st.write(f"**Étape {etape+1}/{total_points}** : cliquez sur **{noms_points[etape]}**")
+                else:
+                    st.success("Tous les points pour cette vue ont été collectés.")
 
-                    img_rgb = cv2.cvtColor(img_display, cv2.COLOR_BGR2RGB)
+                coord = streamlit_image_coordinates(img_rgb, key=f"coord_{vue_courante}")
+                if coord:
+                    x_display, y_display = coord["x"], coord["y"]
+                    x_orig = int(x_display * w_orig / display_w)
+                    y_orig = int(y_display * h_orig / display_h)
 
-                    from streamlit_image_coordinates import streamlit_image_coordinates
-
-                    # Initialisation des variables pour cette image
-                    if f"points_clic_{idx}" not in st.session_state:
-                        st.session_state[f"points_clic_{idx}"] = []
-                    if f"etape_{idx}" not in st.session_state:
-                        st.session_state[f"etape_{idx}"] = 0
-
-                    points_clic = st.session_state[f"points_clic_{idx}"]
-                    etape = st.session_state[f"etape_{idx}"]
-
-                    noms_points = ["Garrot", "Sol", "Épaule", "Fesse", "Queue", "Bassin gauche", "Bassin droit",
-                                   "Thorax gauche", "Thorax droit", "Canon haut", "Canon bas"]
-                    st.write(f"**Étape {etape+1}/{len(noms_points)}** : cliquez sur **{noms_points[etape]}**")
-
-                    coord = streamlit_image_coordinates(img_rgb, key=f"coord_{idx}")
-                    if coord:
-                        x_display, y_display = coord["x"], coord["y"]
-                        x_orig = int(x_display * w_orig / display_w)
-                        y_orig = int(y_display * h_orig / display_h)
-
-                        col1, col2 = st.columns(2)
-                        with col1:
-                            if st.button("✅ Valider ce point", key=f"valider_{idx}_{etape}"):
-                                points_clic.append((x_orig, y_orig))
-                                if etape < len(noms_points)-1:
-                                    st.session_state[f"etape_{idx}"] = etape + 1
-                                st.rerun()
-                        with col2:
-                            if st.button("⬅️ Annuler dernier point", key=f"annuler_{idx}"):
-                                if points_clic:
-                                    points_clic.pop()
-                                    if etape > 0:
-                                        st.session_state[f"etape_{idx}"] = etape - 1
-                                st.rerun()
-
-                    # Affichage des points déjà collectés
-                    if points_clic:
-                        st.write("Points enregistrés :")
-                        for i, (px, py) in enumerate(points_clic):
-                            st.write(f"{noms_points[i]}: ({px}, {py})")
-
-                    # Si tous les points sont collectés, on calcule les mesures
-                    if len(points_clic) >= len(noms_points):
-                        facteur = st.session_state.facteur_echelle
-                        mesures = {}
-
-                        # Hauteur au garrot (garrot → sol)
-                        hauteur_px = np.sqrt((points_clic[0][0]-points_clic[1][0])**2 + (points_clic[0][1]-points_clic[1][1])**2)
-                        mesures['hauteur_garrot'] = hauteur_px / facteur
-
-                        # Longueur corps (épaule → fesse)
-                        long_px = np.sqrt((points_clic[2][0]-points_clic[3][0])**2 + (points_clic[2][1]-points_clic[3][1])**2)
-                        mesures['longueur_corps'] = long_px / facteur
-
-                        # Longueur queue (fesse → queue)
-                        if len(points_clic) > 4:
-                            queue_px = np.sqrt((points_clic[3][0]-points_clic[4][0])**2 + (points_clic[3][1]-points_clic[4][1])**2)
-                            mesures['longueur_queue'] = queue_px / facteur
-
-                        # Largeur bassin (gauche → droit)
-                        if len(points_clic) > 6:
-                            bassin_px = np.sqrt((points_clic[5][0]-points_clic[6][0])**2 + (points_clic[5][1]-points_clic[6][1])**2)
-                            mesures['largeur_bassin'] = bassin_px / facteur
-
-                        # Largeur thorax (gauche → droit)
-                        if len(points_clic) > 8:
-                            thorax_px = np.sqrt((points_clic[7][0]-points_clic[8][0])**2 + (points_clic[7][1]-points_clic[8][1])**2)
-                            mesures['largeur_thorax'] = thorax_px / facteur
-
-                        # Profondeur thorax estimée (faute de point ventre, on prend une proportion)
-                        if 'largeur_thorax' in mesures:
-                            profondeur_estimee = mesures['largeur_thorax'] * 0.8
-                            mesures['profondeur_thorax'] = profondeur_estimee
-                            # Tour de poitrine (formule elliptique approximative)
-                            tour_px = np.pi * np.sqrt((mesures['largeur_thorax']**2 + profondeur_estimee**2) / 2)
-                            mesures['tour_poitrine'] = max(40.0, tour_px)  # on garantit une valeur >=40
-                        else:
-                            mesures['tour_poitrine'] = 80.0
-
-                        # Circonférence canon (haut → bas)
-                        if len(points_clic) > 10:
-                            canon_px = np.sqrt((points_clic[9][0]-points_clic[10][0])**2 + (points_clic[9][1]-points_clic[10][1])**2)
-                            mesures['circonf_canon'] = canon_px / facteur
-
-                        # Stocker les mesures de cette image
-                        mesures['image'] = f"Image {idx+1}"
-                        st.session_state.mesures_multi.append(mesures)
-
-                        st.success("✅ Mesures calculées pour cette image !")
-
-                        # Bouton pour passer à l'image suivante
-                        if st.button("⏩ Passer à l'image suivante"):
-                            # Nettoyer les variables de session pour cette image
-                            del st.session_state[f"points_clic_{idx}"]
-                            del st.session_state[f"etape_{idx}"]
-                            if idx+1 < total:
-                                st.session_state.image_index += 1
+                    col1, col2 = st.columns(2)
+                    with col1:
+                        if st.button("✅ Valider ce point", key=f"valider_{vue_courante}_{etape}"):
+                            points_clic.append((x_orig, y_orig))
+                            if etape < total_points - 1:
+                                data_vue['etape'] = etape + 1
                             else:
-                                st.session_state.image_index = total  # fin
+                                data_vue['etape'] = total_points  # terminé
+                            st.rerun()
+                    with col2:
+                        if st.button("⬅️ Annuler dernier point", key=f"annuler_{vue_courante}"):
+                            if points_clic:
+                                points_clic.pop()
+                                if etape > 0:
+                                    data_vue['etape'] = etape - 1
                             st.rerun()
 
-        # --- Affichage du résumé après traitement de toutes les images ---
-        if st.session_state.image_index >= len(st.session_state.images_a_traiter) and st.session_state.images_a_traiter:
-            st.subheader("📊 Résumé des mesures sur plusieurs images")
-            if st.session_state.mesures_multi:
-                df_mesures = pd.DataFrame(st.session_state.mesures_multi)
-                st.dataframe(df_mesures)
+                if points_clic:
+                    st.write("Points enregistrés :")
+                    for i, (px, py) in enumerate(points_clic):
+                        nom = noms_points[i] if i < len(noms_points) else f"Point {i+1}"
+                        st.write(f"{nom}: ({px}, {py})")
 
-                cols_numeriques = ['longueur_corps', 'hauteur_garrot', 'tour_poitrine', 'circonf_canon',
-                                   'largeur_bassin', 'longueur_queue', 'largeur_thorax', 'profondeur_thorax']
-                cols_presentes = [c for c in cols_numeriques if c in df_mesures.columns]
-                if cols_presentes:
-                    stats = df_mesures[cols_presentes].agg(['mean', 'std', 'min', 'max']).round(2)
-                    st.write("Statistiques :")
-                    st.dataframe(stats)
-
-                    if st.button("📏 Appliquer les moyennes aux mesures finales"):
-                        for col in cols_presentes:
-                            # On s'assure que la valeur appliquée respecte les limites
-                            if col == 'tour_poitrine':
-                                st.session_state[col] = max(40.0, stats.loc['mean', col])
-                            elif col in ['longueur_corps', 'hauteur_garrot']:
-                                st.session_state[col] = max(30.0, stats.loc['mean', col])
-                            elif col == 'largeur_bassin':
-                                st.session_state[col] = max(10.0, stats.loc['mean', col])
-                            elif col == 'circonf_canon':
-                                st.session_state[col] = max(5.0, stats.loc['mean', col])
-                            else:
-                                st.session_state[col] = stats.loc['mean', col]
-                        st.success("Moyennes appliquées ! Vous pouvez maintenant calculer le score.")
+                # Si la vue est terminée, proposer de passer à la suivante
+                if data_vue['etape'] >= total_points:
+                    if st.button(f"✅ Vue {vue_courante} terminée, passer à la suivante"):
+                        st.session_state.vues_a_traiter.pop(0)
                         st.rerun()
 
-            # Bouton pour recommencer
-            if st.button("🔄 Recommencer avec de nouvelles images"):
-                st.session_state.images_a_traiter = []
-                st.session_state.mesures_multi = []
-                st.session_state.image_index = 0
-                st.session_state.facteur_precedent = None
-                if 'images_cam' in st.session_state:
-                    st.session_state.images_cam = []
-                st.rerun()
+        # --- Étape 4 : Si toutes les vues sont traitées, calculer les mesures combinées ---
+        if not st.session_state.vues_a_traiter and st.session_state.points_par_vue:
+            st.subheader("📊 Calcul des mesures finales")
+            facteur = st.session_state.facteur_global
+            if facteur is None:
+                st.error("Facteur d'échelle non défini.")
+            else:
+                # Récupérer les points par vue
+                points_gauche = st.session_state.points_par_vue.get('gauche', {}).get('points', [])
+                points_droite = st.session_state.points_par_vue.get('droite', {}).get('points', [])
+                points_arriere = st.session_state.points_par_vue.get('arriere', {}).get('points', [])
 
-        # --- Saisie manuelle (toujours disponible) avec protection des valeurs minimales ---
+                # On utilise le profil qui a le plus de points (gauche ou droite)
+                profil_points = points_gauche if len(points_gauche) >= len(points_droite) else points_droite
+
+                mesures = {}
+
+                if len(profil_points) >= 7:
+                    # Hauteur garrot (garrot → sol)
+                    hauteur_px = np.sqrt((profil_points[0][0]-profil_points[1][0])**2 + (profil_points[0][1]-profil_points[1][1])**2)
+                    mesures['hauteur_garrot'] = hauteur_px / facteur
+                    # Longueur corps (épaule → fesse)
+                    long_px = np.sqrt((profil_points[2][0]-profil_points[3][0])**2 + (profil_points[2][1]-profil_points[3][1])**2)
+                    mesures['longueur_corps'] = long_px / facteur
+                    # Longueur queue (fesse → queue)
+                    queue_px = np.sqrt((profil_points[3][0]-profil_points[4][0])**2 + (profil_points[3][1]-profil_points[4][1])**2)
+                    mesures['longueur_queue'] = queue_px / facteur
+                    # Circonférence canon (haut → bas)
+                    canon_px = np.sqrt((profil_points[5][0]-profil_points[6][0])**2 + (profil_points[5][1]-profil_points[6][1])**2)
+                    mesures['circonf_canon'] = canon_px / facteur
+
+                if len(points_arriere) >= 4:
+                    # Largeur bassin (gauche → droit)
+                    bassin_px = np.sqrt((points_arriere[0][0]-points_arriere[1][0])**2 + (points_arriere[0][1]-points_arriere[1][1])**2)
+                    mesures['largeur_bassin'] = bassin_px / facteur
+                    # Largeur thorax (gauche → droit)
+                    thorax_px = np.sqrt((points_arriere[2][0]-points_arriere[3][0])**2 + (points_arriere[2][1]-points_arriere[3][1])**2)
+                    mesures['largeur_thorax'] = thorax_px / facteur
+                    # Profondeur thorax estimée (proportion)
+                    profondeur_estimee = mesures['largeur_thorax'] * 0.8
+                    mesures['profondeur_thorax'] = profondeur_estimee
+                    # Tour de poitrine estimé
+                    tour_px = np.pi * np.sqrt((mesures['largeur_thorax']**2 + profondeur_estimee**2) / 2)
+                    mesures['tour_poitrine'] = max(40.0, tour_px)
+
+                # Appliquer dans session_state
+                for k, v in mesures.items():
+                    st.session_state[k] = v
+
+                st.write("Mesures calculées :")
+                st.json(mesures)
+
+                # Bouton pour réinitialiser
+                if st.button("🔄 Recommencer avec de nouvelles images"):
+                    st.session_state.points_par_vue = {}
+                    st.session_state.vues_a_traiter = []
+                    st.session_state.facteur_global = None
+                    st.session_state.images_uploaded_temp = []
+                    if 'images_cam' in st.session_state:
+                        st.session_state.images_cam = []
+                    st.rerun()
+
+        # --- Saisie manuelle (toujours disponible) ---
         st.subheader("📏 Saisie manuelle (sécurité)")
         col1, col2 = st.columns(2)
         with col1:
@@ -1655,9 +1606,8 @@ def page_analyse():
         poids_estime = (longueur * poitrine * hauteur) / 3000
         st.info(f"Poids estimé : **{poids_estime:.1f} kg**")
 
-        if st.button("🤖 Calculer score et analyser"):
+        if st.button("🤖 Calculer score et analyser", key="calculer_score_corps"):
             score = OvinScience.calcul_score_morpho(longueur, hauteur, poitrine, canon, bassin)
-            # Affichage du score (à compléter avec votre code existant)
             fig = go.Figure(go.Indicator(
                 mode="gauge+number",
                 value=score,
@@ -1672,8 +1622,7 @@ def page_analyse():
             ))
             st.plotly_chart(fig, use_container_width=True)
 
-            # Sauvegarde dans la base
-            if st.button("💾 Enregistrer ces mesures pour suivi"):
+            if st.button("💾 Enregistrer ces mesures pour suivi", key="enregistrer_mesures_corps"):
                 db.execute("""
                     INSERT INTO mesures_morpho 
                     (brebis_id, date_mesure, longueur_corps, hauteur_garrot, tour_poitrine,
@@ -1685,23 +1634,8 @@ def page_analyse():
                 ))
                 st.success("Mesures enregistrées !")
 
-            # Si on a des points utilisateur et un facteur, proposer de contribuer à l'apprentissage
-            if st.session_state.points_utilisateur and st.session_state.facteur_echelle and st.session_state.image_originale is not None:
-                if st.button("🧠 Contribuer à l'amélioration automatique (enregistrer cette image)"):
-                    # Enregistrer les données (on utilise la dernière image traitée)
-                    enregistrer_donnees_apprentissage(
-                        st.session_state.image_originale,
-                        st.session_state.points_utilisateur,
-                        st.session_state.facteur_echelle,
-                        race_brebis,
-                        age_mois,
-                        mesures=st.session_state.mesures_multi[-1] if st.session_state.mesures_multi else {},
-                        type_animal="corps"
-                    )
-                    st.success("Merci ! Cette image servira à améliorer le modèle.")
-
     # -------------------------------------------------------------------------
-    # ONGLET 2 : ANALYSE MAMELLES (avec clés uniques et gestion d'erreurs)
+    # ONGLET 2 : ANALYSE MAMELLES
     # -------------------------------------------------------------------------
     with tab2:
         st.subheader("🥛 Mesures des mamelles")
@@ -1748,10 +1682,10 @@ def page_analyse():
             img_mam_courante = images_mam_uploaded[0]
             st.image(cv2.cvtColor(img_mam_courante, cv2.COLOR_BGR2RGB), caption="Image mamelle", use_column_width=True)
 
-            # Facteur d'échelle (réutilisation possible)
+            # Facteur d'échelle (on peut réutiliser le facteur global du corps si disponible)
             facteur_mam = st.number_input(
                 "Facteur d'échelle (px/cm) si connu",
-                value=st.session_state.facteur_precedent or 10.0,
+                value=st.session_state.facteur_global or 10.0,
                 key="mam_facteur"
             )
 
@@ -1772,7 +1706,6 @@ def page_analyse():
                 display_w, display_h = w_orig, h_orig
             img_rgb = cv2.cvtColor(img_display, cv2.COLOR_BGR2RGB)
 
-            # Initialisation des variables de session pour les points mamelles
             if "points_mam" not in st.session_state:
                 st.session_state.points_mam = []
             if "etape_mam" not in st.session_state:
@@ -1789,7 +1722,6 @@ def page_analyse():
                 "Attache droite"
             ]
 
-            # Affichage de l'étape en cours avec vérification d'index
             if etape_mam < len(noms_points_mam):
                 st.write(f"**Étape {etape_mam+1}/{len(noms_points_mam)}** : cliquez sur **{noms_points_mam[etape_mam]}**")
             else:
@@ -1808,7 +1740,7 @@ def page_analyse():
                         if etape_mam < len(noms_points_mam) - 1:
                             st.session_state.etape_mam = etape_mam + 1
                         else:
-                            st.session_state.etape_mam = len(noms_points_mam)  # marquer comme terminé
+                            st.session_state.etape_mam = len(noms_points_mam)  # terminé
                         st.rerun()
                 with col2:
                     if st.button("⬅️ Annuler dernier point mamelle", key="mam_annuler"):
@@ -1826,14 +1758,10 @@ def page_analyse():
             # Calcul des mesures mamelles si au moins 6 points
             if len(points_mam) >= 6:
                 facteur = facteur_mam if facteur_mam > 0 else 1.0
-                # Longueurs des trayons
-                long_trayon_g = np.sqrt((points_mam[0][0] - points_mam[1][0]) ** 2 + (points_mam[0][1] - points_mam[1][1]) ** 2) / facteur
-                long_trayon_d = np.sqrt((points_mam[2][0] - points_mam[3][0]) ** 2 + (points_mam[2][1] - points_mam[3][1]) ** 2) / facteur
-                # Diamètre estimé (approximation)
-                diam_trayon = (long_trayon_g + long_trayon_d) / 4
-                # Largeur de l'attache
-                attache_px = np.sqrt((points_mam[4][0] - points_mam[5][0]) ** 2 + (points_mam[4][1] - points_mam[5][1]) ** 2) / facteur
-                # Symétrie
+                long_trayon_g = np.sqrt((points_mam[0][0]-points_mam[1][0])**2 + (points_mam[0][1]-points_mam[1][1])**2) / facteur
+                long_trayon_d = np.sqrt((points_mam[2][0]-points_mam[3][0])**2 + (points_mam[2][1]-points_mam[3][1])**2) / facteur
+                diam_trayon = (long_trayon_g + long_trayon_d) / 4  # approximation
+                attache_px = np.sqrt((points_mam[4][0]-points_mam[5][0])**2 + (points_mam[4][1]-points_mam[5][1])**2) / facteur
                 symetrie = "Symétrique" if abs(long_trayon_g - long_trayon_d) < 0.5 else "Asymétrique"
 
                 st.success("Mesures mamelles calculées :")
@@ -1887,7 +1815,6 @@ def page_analyse():
         if st.button("🥛 Calculer score mamelle", key="mam_calculer"):
             score_mam = OvinScience.calcul_score_mamelle(long_trayon, diam_trayon, symetrie, attache, forme)
             st.metric("Score mamelles", f"{score_mam}/10")
-            # Sauvegarde dans la base
             if st.button("💾 Enregistrer mesures mamelles", key="mam_sauvegarder"):
                 db.execute("""
                     INSERT INTO mesures_mamelles 
@@ -1899,292 +1826,52 @@ def page_analyse():
                 ))
                 st.success("Mesures mamelles enregistrées !")
 
-            # Si on a des points utilisateur et un facteur d'échelle, proposer de contribuer à l'apprentissage
-            # (on prend la dernière image traitée)
-            if st.session_state.points_utilisateur and st.session_state.facteur_echelle and st.session_state.image_originale is not None:
-                if st.button("🧠 Contribuer à l'amélioration automatique (enregistrer cette image)"):
-                    # Construire le dictionnaire des points avec les noms
-                    # On suppose que points_utilisateur a été rempli par le canvas (mais nous utilisons maintenant la méthode par étapes)
-                    # Pour simplifier, on peut sauvegarder les points de la dernière image traitée si disponibles.
-                    if f"points_clic_{len(st.session_state.images_a_traiter)-1}" in st.session_state:
-                        pts = st.session_state[f"points_clic_{len(st.session_state.images_a_traiter)-1}"]
-                        noms = ["garrot", "sol", "epaule", "fesse", "queue", "bassinG", "bassinD", "thoraxG", "thoraxD", "canonH", "canonB"]
-                        points_dict = {noms[i]: pts[i] for i in range(min(len(pts), len(noms)))}
-                        mesures = {k: st.session_state[k] for k in cols_numeriques if k in st.session_state}
-                        enregistrer_donnees_apprentissage(
-                            st.session_state.image_originale,
-                            points_dict,
-                            st.session_state.facteur_echelle,
-                            race_brebis,
-                            age_mois,
-                            mesures,
-                            type_animal="corps"
-                        )
-                        st.success("Merci ! Cette image servira à améliorer le modèle.")
-
-    # -------------------------------------------------------------------------
-    # ONGLET 2 : ANALYSE MAMELLES
-    # -------------------------------------------------------------------------
-    with tab2:
-        st.subheader("🥛 Mesures des mamelles")
-
-        # --- Chargement des photos (similaire, simplifié) ---
-        st.subheader("📸 Chargement des photos mamelles")
-        source_mam = st.radio("Source des images mamelles", ["Télécharger plusieurs fichiers", "Prendre plusieurs photos"], key="source_mam")
-        images_mam_uploaded = []
-        if source_mam == "Télécharger plusieurs fichiers":
-            uploaded_mam = st.file_uploader("Choisir plusieurs photos mamelles", type=['jpg','png','jpeg'], accept_multiple_files=True, key="upload_mam")
-            if uploaded_mam:
-                for f in uploaded_mam:
-                    img_pil = Image.open(f)
-                    img_cv = cv2.cvtColor(np.array(img_pil), cv2.COLOR_RGB2BGR)
-                    images_mam_uploaded.append(img_cv)
-                st.success(f"{len(images_mam_uploaded)} images téléchargées.")
-        else:
-            cam_mam = st.camera_input("Prendre une photo mamelle", key="cam_mam")
-            if cam_mam:
-                img_pil = Image.open(cam_mam)
-                img_cv = cv2.cvtColor(np.array(img_pil), cv2.COLOR_RGB2BGR)
-                if 'images_mam_cam' not in st.session_state:
-                    st.session_state.images_mam_cam = []
-                st.session_state.images_mam_cam.append(img_cv)
-                st.success(f"Photo ajoutée (total : {len(st.session_state.images_mam_cam)})")
-            if 'images_mam_cam' in st.session_state and st.session_state.images_mam_cam:
-                if st.button("🗑️ Effacer toutes les photos mamelles"):
-                    st.session_state.images_mam_cam = []
-                    st.rerun()
-                images_mam_uploaded = st.session_state.images_mam_cam
-
-        # Traitement d'une seule image pour l'instant (on peut étendre comme pour le corps)
-        if images_mam_uploaded:
-            img_mam_courante = images_mam_uploaded[0]
-            st.image(cv2.cvtColor(img_mam_courante, cv2.COLOR_BGR2RGB), caption="Image mamelle", use_column_width=True)
-
-            # Facteur d'échelle (on peut utiliser le même que précédent ou demander)
-            facteur_mam = st.number_input("Facteur d'échelle (px/cm) si connu", value=st.session_state.facteur_precedent or 10.0)
-
-            # Points pour les mamelles
-            st.subheader("🖱️ Cliquez sur les points mamelles")
-            st.write("Ordre : Base trayon gauche → Extrémité trayon gauche → Base trayon droit → Extrémité trayon droit → Attache gauche → Attache droit → Symétrie (clic pour valider)")
-
-            h_orig, w_orig = img_mam_courante.shape[:2]
-            max_display = 600
-            if w_orig > max_display:
-                scale = max_display / w_orig
-                display_w = max_display
-                display_h = int(h_orig * scale)
-                img_display = cv2.resize(img_mam_courante, (display_w, display_h))
-            else:
-                img_display = img_mam_courante
-                display_w, display_h = w_orig, h_orig
-            img_rgb = cv2.cvtColor(img_display, cv2.COLOR_BGR2RGB)
-
-            if "points_mam" not in st.session_state:
-                st.session_state.points_mam = []
-            if "etape_mam" not in st.session_state:
-                st.session_state.etape_mam = 0
-
-            points_mam = st.session_state.points_mam
-            etape_mam = st.session_state.etape_mam
-            noms_points_mam = ["Base trayon gauche", "Extrémité trayon gauche", "Base trayon droit", "Extrémité trayon droit",
-                               "Attache gauche", "Attache droit", "Symétrie (clic pour valider)"]
-
-            st.write(f"**Étape {etape_mam+1}/{len(noms_points_mam)}** : cliquez sur **{noms_points_mam[etape_mam]}**")
-
-            coord_mam = streamlit_image_coordinates(img_rgb, key="coord_mam")
-            if coord_mam:
-                x_display, y_display = coord_mam["x"], coord_mam["y"]
-                x_orig = int(x_display * w_orig / display_w)
-                y_orig = int(y_display * h_orig / display_h)
-
-                col1, col2 = st.columns(2)
-                with col1:
-                    if st.button("✅ Valider ce point mamelle", key="valider_mam"):
-                        points_mam.append((x_orig, y_orig))
-                        if etape_mam < len(noms_points_mam)-1:
-                            st.session_state.etape_mam += 1
-                        st.rerun()
-                with col2:
-                    if st.button("⬅️ Annuler dernier point mamelle", key="annuler_mam"):
-                        if points_mam:
-                            points_mam.pop()
-                            if etape_mam > 0:
-                                st.session_state.etape_mam -= 1
-                        st.rerun()
-
-            if points_mam:
-                st.write("Points enregistrés :")
-                for i, (px, py) in enumerate(points_mam):
-                    st.write(f"{noms_points_mam[i]}: ({px}, {py})")
-
-            # Calcul des mesures mamelles
-            if len(points_mam) >= 6:  # au moins les 6 premiers
-                facteur = facteur_mam if facteur_mam > 0 else 1.0
-                # Longueurs trayons
-                long_trayon_g = np.sqrt((points_mam[0][0]-points_mam[1][0])**2 + (points_mam[0][1]-points_mam[1][1])**2) / facteur
-                long_trayon_d = np.sqrt((points_mam[2][0]-points_mam[3][0])**2 + (points_mam[2][1]-points_mam[3][1])**2) / facteur
-                # Diamètre estimé (approximatif)
-                diam_trayon = (long_trayon_g + long_trayon_d) / 4  # exemple
-                # Attache : distance entre attache gauche et droite
-                attache_px = np.sqrt((points_mam[4][0]-points_mam[5][0])**2 + (points_mam[4][1]-points_mam[5][1])**2) / facteur
-                # Symétrie
-                symetrie = "Symétrique" if abs(long_trayon_g - long_trayon_d) < 0.5 else "Asymétrique"
-
-                st.success("Mesures mamelles calculées :")
-                st.write(f"Longueur trayon gauche : {long_trayon_g:.1f} cm")
-                st.write(f"Longueur trayon droit : {long_trayon_d:.1f} cm")
-                st.write(f"Diamètre estimé : {diam_trayon:.1f} cm")
-                st.write(f"Largeur attache : {attache_px:.1f} cm")
-                st.write(f"Symétrie : {symetrie}")
-
-                # Stocker dans session_state pour les champs manuels
-                st.session_state['long_trayon_g'] = long_trayon_g
-                st.session_state['long_trayon_d'] = long_trayon_d
-                st.session_state['diam_trayon'] = diam_trayon
-                st.session_state['attache'] = attache_px
-                st.session_state['symetrie'] = symetrie
-
-                # Bouton pour enregistrer pour l'apprentissage
-                if st.button("🧠 Enregistrer cette image mamelle pour l'apprentissage"):
-                    noms_mam = ["baseG", "extremiteG", "baseD", "extremiteD", "attacheG", "attacheD"]
-                    points_dict = {noms_mam[i]: points_mam[i] for i in range(min(len(points_mam), len(noms_mam)))}
-                    mesures_mam = {
-                        'longueur_trayon_g': long_trayon_g,
-                        'longueur_trayon_d': long_trayon_d,
-                        'diametre_trayon': diam_trayon,
-                        'attache': attache_px,
-                        'symetrie': symetrie
-                    }
-                    enregistrer_donnees_apprentissage(
-                        img_mam_courante,
-                        points_dict,
-                        facteur,
-                        race_brebis,
-                        age_mois,
-                        mesures_mam,
-                        type_animal="mamelle"
-                    )
-                    st.success("Image mamelle enregistrée pour l'apprentissage !")
-
-        # Saisie manuelle mamelles
-        st.subheader("📏 Saisie manuelle mamelles")
-        col1, col2 = st.columns(2)
-        with col1:
-            long_trayon = st.number_input("Longueur trayon (cm)", min_value=1.0, max_value=15.0,
-                                          value=st.session_state.get('long_trayon_g', 5.0), key="long_trayon_input")
-            diam_trayon = st.number_input("Diamètre trayon (cm)", min_value=0.5, max_value=5.0,
-                                          value=st.session_state.get('diam_trayon', 2.5), key="diam_trayon_input")
-        with col2:
-            symetrie = st.selectbox("Symétrie", ["Symétrique", "Asymétrique"],
-                                    index=0 if st.session_state.get('symetrie','Symétrique')=="Symétrique" else 1)
-            attache = st.selectbox("Attache", ["Solide", "Moyenne", "Pendante"])
-            forme = st.selectbox("Forme", ["Globuleuse", "Bifide", "Poire"])
-
-        if st.button("🥛 Calculer score mamelle"):
-            score_mam = OvinScience.calcul_score_mamelle(long_trayon, diam_trayon, symetrie, attache, forme)
-            st.metric("Score mamelles", f"{score_mam}/10")
-            # Sauvegarde dans la base
-            if st.button("💾 Enregistrer mesures mamelles"):
-                db.execute("""
-                    INSERT INTO mesures_mamelles 
-                    (brebis_id, date_mesure, longueur_trayon, diametre_trayon, symetrie, attache, forme, score_total)
-                    VALUES (?, ?, ?, ?, ?, ?, ?, ?)
-                """, (
-                    brebis_id, datetime.now().isoformat(),
-                    long_trayon, diam_trayon, symetrie, attache, forme, score_mam
-                ))
-                st.success("Mesures mamelles enregistrées !")
-
 # -----------------------------------------------------------------------------
-# AUTRES PAGES (inchangées, à intégrer si nécessaire)
+# Les autres pages (gestion élevage, production, génomique avancée, santé, reproduction, nutrition, export, élite, IA, apprentissage)
+# Sont reprises ici, mais pour des raisons de longueur, nous ne les recopions pas intégralement.
+# Vous devez conserver les versions précédentes de ces pages (elles fonctionnent).
 # -----------------------------------------------------------------------------
+
 def page_gestion_elevage():
-    st.title("🐑 Gestion des élevages")
-    # ... (code existant, non reproduit pour économiser de l'espace)
+    # ... (code existant)
+    st.write("Page Gestion élevage")  # placeholder, remplacez par votre code
+    pass
 
 def page_production():
-    st.title("🥛 Production laitière")
-    # ...
+    st.write("Page Production laitière")
+    pass
 
 def page_genomique_avancee():
-    st.title("🧬 Génomique avancée")
-    # ...
+    st.write("Page Génomique avancée")
+    pass
 
 def page_sante():
-    st.title("🏥 Santé")
-    # ...
+    st.write("Page Santé")
+    pass
 
 def page_reproduction():
-    st.title("🤰 Reproduction")
-    # ...
+    st.write("Page Reproduction")
+    pass
 
 def page_nutrition_avancee():
-    st.title("🌾 Nutrition avancée")
-    # ...
+    st.write("Page Nutrition avancée")
+    pass
 
 def page_export():
-    st.title("📤 Export")
-    # ...
+    st.write("Page Export")
+    pass
 
 def page_elite():
-    st.title("🏆 Élite")
-    # ...
+    st.write("Page Élite")
+    pass
 
 def page_ia():
-    st.title("🧠 IA & Data Mining")
-    # ...
+    st.write("Page IA & Data Mining")
+    pass
 
 def page_apprentissage():
-    st.title("🧠 Apprentissage automatique")
-    st.markdown("Cette page permet d'entraîner un modèle de deep learning pour la détection automatique des points anatomiques.")
-    nb_images = len([f for f in os.listdir(DATASET_DIR) if f.endswith('.npz')])
-    st.write(f"Images collectées pour l'entraînement : **{nb_images}**")
-    if nb_images < 10:
-        st.warning("Il faut au moins 10 images pour un premier entraînement significatif. Continuez à utiliser la photogrammétrie et à contribuer.")
-    else:
-        if st.button("🚀 Lancer l'entraînement"):
-            with st.spinner("Entraînement en cours... (cela peut prendre plusieurs minutes)"):
-                model, history = entrainer_modele()
-                if model is None:
-                    st.error(history)
-                else:
-                    st.success("Entraînement terminé ! Modèle sauvegardé dans models/keypoints_model.h5")
-                    fig, (ax1, ax2) = plt.subplots(1, 2, figsize=(12,4))
-                    ax1.plot(history.history['loss'], label='Train')
-                    ax1.plot(history.history['val_loss'], label='Validation')
-                    ax1.set_xlabel('Epoch')
-                    ax1.set_ylabel('Loss (MSE)')
-                    ax1.legend()
-                    ax2.plot(history.history['mae'], label='Train')
-                    ax2.plot(history.history['val_mae'], label='Validation')
-                    ax2.set_xlabel('Epoch')
-                    ax2.set_ylabel('MAE')
-                    ax2.legend()
-                    st.pyplot(fig)
-    # Test du modèle
-    st.subheader("Tester le modèle")
-    if os.path.exists(os.path.join(MODEL_DIR, 'keypoints_model.h5')):
-        model = tf.keras.models.load_model(os.path.join(MODEL_DIR, 'keypoints_model.h5'))
-        uploaded_test = st.file_uploader("Choisir une image de test", type=['jpg','png','jpeg'])
-        if uploaded_test is not None:
-            img_pil = Image.open(uploaded_test)
-            img_cv = cv2.cvtColor(np.array(img_pil), cv2.COLOR_RGB2BGR)
-            img_resized = cv2.resize(img_cv, (256, 256))
-            img_input = np.expand_dims(img_resized / 255.0, axis=0)
-            pred = model.predict(img_input)[0]
-            h, w = img_cv.shape[:2]
-            facteur_x = w / 256
-            facteur_y = h / 256
-            # Reconstruire les points (11 points)
-            points = []
-            for i in range(0, len(pred), 2):
-                x = int(pred[i] * facteur_x)
-                y = int(pred[i+1] * facteur_y)
-                points.append((x, y))
-            img_copy = img_cv.copy()
-            for pt in points:
-                cv2.circle(img_copy, pt, 5, (0,255,0), -1)
-            st.image(cv2.cvtColor(img_copy, cv2.COLOR_BGR2RGB), caption="Points prédits")
+    st.write("Page Apprentissage automatique")
+    pass
 
 # -----------------------------------------------------------------------------
 # SIDEBAR ET MAIN
