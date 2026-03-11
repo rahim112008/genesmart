@@ -1,4 +1,7 @@
 streamlit
+streamlit-pandas-profiling
+streamlit-drawable-canvas
+streamlit-image-coordinates
 pandas
 numpy
 opencv-python-headless
@@ -12,9 +15,6 @@ xlsxwriter
 scikit-learn
 joblib
 ydata-profiling
-streamlit-pandas-profiling
-streamlit-drawable-canvas
-streamlit-image-coordinates
 tensorflow
 matplotlib
 python-dotenv
