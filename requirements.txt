@@ -1,11 +1,10 @@
 streamlit
 pandas
+numpy
+opencv-python-headless
+Pillow
 plotly
 requests
-Pillow
-numpy
-python-dotenv
-opencv-python-headless
 scipy
 statsmodels
 openpyxl
@@ -14,4 +13,7 @@ scikit-learn
 joblib
 ydata-profiling
 streamlit-pandas-profiling
-python-dotenv  
+streamlit-drawable-canvas
+tensorflow
+matplotlib
+python-dotenv
