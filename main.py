@@ -1700,7 +1700,7 @@ def page_analyse():
                     )
                     st.success("Merci ! Cette image servira à améliorer le modèle.")
 
-           # -------------------------------------------------------------------------
+    # -------------------------------------------------------------------------
     # ONGLET 2 : ANALYSE MAMELLES (avec clés uniques et gestion d'erreurs)
     # -------------------------------------------------------------------------
     with tab2:
@@ -1850,7 +1850,7 @@ def page_analyse():
                 st.session_state['attache'] = attache_px
                 st.session_state['symetrie'] = symetrie
 
-                        # Saisie manuelle mamelles
+        # Saisie manuelle mamelles (avec bornes de sécurité)
         st.subheader("📏 Saisie manuelle mamelles")
         col1, col2 = st.columns(2)
         with col1:
