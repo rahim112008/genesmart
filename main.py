@@ -1700,8 +1700,8 @@ def page_analyse():
                     )
                     st.success("Merci ! Cette image servira à améliorer le modèle.")
 
-       # -------------------------------------------------------------------------
-    # ONGLET 2 : ANALYSE MAMELLES (avec clés uniques)
+           # -------------------------------------------------------------------------
+    # ONGLET 2 : ANALYSE MAMELLES (avec clés uniques et gestion d'erreurs)
     # -------------------------------------------------------------------------
     with tab2:
         st.subheader("🥛 Mesures des mamelles")
@@ -1711,7 +1711,7 @@ def page_analyse():
         source_mam = st.radio(
             "Source des images mamelles",
             ["Télécharger plusieurs fichiers", "Prendre plusieurs photos"],
-            key="mam_source_radio"  # clé unique
+            key="mam_source_radio"
         )
 
         images_mam_uploaded = []
@@ -1720,7 +1720,7 @@ def page_analyse():
                 "Choisir plusieurs photos mamelles",
                 type=['jpg', 'png', 'jpeg'],
                 accept_multiple_files=True,
-                key="mam_upload"  # clé unique
+                key="mam_upload"
             )
             if uploaded_mam:
                 for f in uploaded_mam:
@@ -1729,7 +1729,7 @@ def page_analyse():
                     images_mam_uploaded.append(img_cv)
                 st.success(f"{len(images_mam_uploaded)} images téléchargées.")
         else:
-            cam_mam = st.camera_input("Prendre une photo mamelle", key="mam_camera")  # clé unique
+            cam_mam = st.camera_input("Prendre une photo mamelle", key="mam_camera")
             if cam_mam:
                 img_pil = Image.open(cam_mam)
                 img_cv = cv2.cvtColor(np.array(img_pil), cv2.COLOR_RGB2BGR)
@@ -1772,6 +1772,7 @@ def page_analyse():
                 display_w, display_h = w_orig, h_orig
             img_rgb = cv2.cvtColor(img_display, cv2.COLOR_BGR2RGB)
 
+            # Initialisation des variables de session pour les points mamelles
             if "points_mam" not in st.session_state:
                 st.session_state.points_mam = []
             if "etape_mam" not in st.session_state:
@@ -1788,9 +1789,13 @@ def page_analyse():
                 "Attache droite"
             ]
 
-            st.write(f"**Étape {etape_mam+1}/{len(noms_points_mam)}** : cliquez sur **{noms_points_mam[etape_mam]}**")
+            # Affichage de l'étape en cours avec vérification d'index
+            if etape_mam < len(noms_points_mam):
+                st.write(f"**Étape {etape_mam+1}/{len(noms_points_mam)}** : cliquez sur **{noms_points_mam[etape_mam]}**")
+            else:
+                st.success("Tous les points ont été collectés !")
 
-            coord_mam = streamlit_image_coordinates(img_rgb, key="mam_coord")  # clé unique
+            coord_mam = streamlit_image_coordinates(img_rgb, key="mam_coord")
             if coord_mam:
                 x_display, y_display = coord_mam["x"], coord_mam["y"]
                 x_orig = int(x_display * w_orig / display_w)
@@ -1801,22 +1806,24 @@ def page_analyse():
                     if st.button("✅ Valider ce point mamelle", key="mam_valider"):
                         points_mam.append((x_orig, y_orig))
                         if etape_mam < len(noms_points_mam) - 1:
-                            st.session_state.etape_mam += 1
+                            st.session_state.etape_mam = etape_mam + 1
+                        else:
+                            st.session_state.etape_mam = len(noms_points_mam)  # marquer comme terminé
                         st.rerun()
                 with col2:
                     if st.button("⬅️ Annuler dernier point mamelle", key="mam_annuler"):
                         if points_mam:
                             points_mam.pop()
                             if etape_mam > 0:
-                                st.session_state.etape_mam -= 1
+                                st.session_state.etape_mam = etape_mam - 1
                         st.rerun()
 
             if points_mam:
                 st.write("Points enregistrés :")
                 for i, (px, py) in enumerate(points_mam):
-                    st.write(f"{noms_points_mam[i]}: ({px}, {py})")
+                    st.write(f"{noms_points_mam[i] if i < len(noms_points_mam) else 'Point supplémentaire'}: ({px}, {py})")
 
-            # Calcul des mesures mamelles
+            # Calcul des mesures mamelles si au moins 6 points
             if len(points_mam) >= 6:
                 facteur = facteur_mam if facteur_mam > 0 else 1.0
                 # Longueurs des trayons
@@ -1843,7 +1850,7 @@ def page_analyse():
                 st.session_state['attache'] = attache_px
                 st.session_state['symetrie'] = symetrie
 
-                # Saisie manuelle mamelles (clés déjà uniques)
+        # Saisie manuelle mamelles (avec bornes de sécurité)
         st.subheader("📏 Saisie manuelle mamelles")
         col1, col2 = st.columns(2)
         with col1:
