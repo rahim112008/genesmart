@@ -1700,18 +1700,28 @@ def page_analyse():
                     )
                     st.success("Merci ! Cette image servira à améliorer le modèle.")
 
-    # -------------------------------------------------------------------------
-    # ONGLET 2 : ANALYSE MAMELLES
+       # -------------------------------------------------------------------------
+    # ONGLET 2 : ANALYSE MAMELLES (avec clés uniques)
     # -------------------------------------------------------------------------
     with tab2:
         st.subheader("🥛 Mesures des mamelles")
 
         # --- Chargement des photos mamelles ---
         st.subheader("📸 Chargement des photos mamelles")
-        source_mam = st.radio("Source des images mamelles", ["Télécharger plusieurs fichiers", "Prendre plusieurs photos"], key="source_mam")
+        source_mam = st.radio(
+            "Source des images mamelles",
+            ["Télécharger plusieurs fichiers", "Prendre plusieurs photos"],
+            key="mam_source_radio"  # clé unique
+        )
+
         images_mam_uploaded = []
         if source_mam == "Télécharger plusieurs fichiers":
-            uploaded_mam = st.file_uploader("Choisir plusieurs photos mamelles", type=['jpg','png','jpeg'], accept_multiple_files=True, key="upload_mam")
+            uploaded_mam = st.file_uploader(
+                "Choisir plusieurs photos mamelles",
+                type=['jpg', 'png', 'jpeg'],
+                accept_multiple_files=True,
+                key="mam_upload"  # clé unique
+            )
             if uploaded_mam:
                 for f in uploaded_mam:
                     img_pil = Image.open(f)
@@ -1719,7 +1729,7 @@ def page_analyse():
                     images_mam_uploaded.append(img_cv)
                 st.success(f"{len(images_mam_uploaded)} images téléchargées.")
         else:
-            cam_mam = st.camera_input("Prendre une photo mamelle", key="cam_mam")
+            cam_mam = st.camera_input("Prendre une photo mamelle", key="mam_camera")  # clé unique
             if cam_mam:
                 img_pil = Image.open(cam_mam)
                 img_cv = cv2.cvtColor(np.array(img_pil), cv2.COLOR_RGB2BGR)
@@ -1728,24 +1738,28 @@ def page_analyse():
                 st.session_state.images_mam_cam.append(img_cv)
                 st.success(f"Photo ajoutée (total : {len(st.session_state.images_mam_cam)})")
             if 'images_mam_cam' in st.session_state and st.session_state.images_mam_cam:
-                if st.button("🗑️ Effacer toutes les photos mamelles"):
+                if st.button("🗑️ Effacer toutes les photos mamelles", key="mam_effacer"):
                     st.session_state.images_mam_cam = []
                     st.rerun()
                 images_mam_uploaded = st.session_state.images_mam_cam
 
-        # Pour l'instant on ne traite qu'une seule image mamelle (simplifié)
+        # Traitement d'une image mamelle (simplifié)
         if images_mam_uploaded:
             img_mam_courante = images_mam_uploaded[0]
             st.image(cv2.cvtColor(img_mam_courante, cv2.COLOR_BGR2RGB), caption="Image mamelle", use_column_width=True)
 
-            # Facteur d'échelle (on peut le réutiliser)
-            facteur_mam = st.number_input("Facteur d'échelle (px/cm) si connu", value=st.session_state.facteur_precedent or 10.0)
+            # Facteur d'échelle (réutilisation possible)
+            facteur_mam = st.number_input(
+                "Facteur d'échelle (px/cm) si connu",
+                value=st.session_state.facteur_precedent or 10.0,
+                key="mam_facteur"
+            )
 
             # Points pour les mamelles
             st.subheader("🖱️ Cliquez sur les points mamelles")
             st.write("Ordre : Base trayon gauche → Extrémité trayon gauche → Base trayon droit → Extrémité trayon droit → Attache gauche → Attache droite")
 
-            # Redimensionnement
+            # Redimensionnement pour l'affichage
             h_orig, w_orig = img_mam_courante.shape[:2]
             max_display = 600
             if w_orig > max_display:
@@ -1765,12 +1779,18 @@ def page_analyse():
 
             points_mam = st.session_state.points_mam
             etape_mam = st.session_state.etape_mam
-            noms_points_mam = ["Base trayon gauche", "Extrémité trayon gauche", "Base trayon droit", "Extrémité trayon droit",
-                               "Attache gauche", "Attache droite"]
+            noms_points_mam = [
+                "Base trayon gauche",
+                "Extrémité trayon gauche",
+                "Base trayon droit",
+                "Extrémité trayon droit",
+                "Attache gauche",
+                "Attache droite"
+            ]
 
             st.write(f"**Étape {etape_mam+1}/{len(noms_points_mam)}** : cliquez sur **{noms_points_mam[etape_mam]}**")
 
-            coord_mam = streamlit_image_coordinates(img_rgb, key="coord_mam")
+            coord_mam = streamlit_image_coordinates(img_rgb, key="mam_coord")  # clé unique
             if coord_mam:
                 x_display, y_display = coord_mam["x"], coord_mam["y"]
                 x_orig = int(x_display * w_orig / display_w)
@@ -1778,13 +1798,13 @@ def page_analyse():
 
                 col1, col2 = st.columns(2)
                 with col1:
-                    if st.button("✅ Valider ce point mamelle", key="valider_mam"):
+                    if st.button("✅ Valider ce point mamelle", key="mam_valider"):
                         points_mam.append((x_orig, y_orig))
-                        if etape_mam < len(noms_points_mam)-1:
+                        if etape_mam < len(noms_points_mam) - 1:
                             st.session_state.etape_mam += 1
                         st.rerun()
                 with col2:
-                    if st.button("⬅️ Annuler dernier point mamelle", key="annuler_mam"):
+                    if st.button("⬅️ Annuler dernier point mamelle", key="mam_annuler"):
                         if points_mam:
                             points_mam.pop()
                             if etape_mam > 0:
@@ -1800,12 +1820,12 @@ def page_analyse():
             if len(points_mam) >= 6:
                 facteur = facteur_mam if facteur_mam > 0 else 1.0
                 # Longueurs des trayons
-                long_trayon_g = np.sqrt((points_mam[0][0]-points_mam[1][0])**2 + (points_mam[0][1]-points_mam[1][1])**2) / facteur
-                long_trayon_d = np.sqrt((points_mam[2][0]-points_mam[3][0])**2 + (points_mam[2][1]-points_mam[3][1])**2) / facteur
-                # Diamètre estimé (faute de mieux)
-                diam_trayon = (long_trayon_g + long_trayon_d) / 4  # approximation
-                # Largeur de l'attache (distance entre les deux points d'attache)
-                attache_px = np.sqrt((points_mam[4][0]-points_mam[5][0])**2 + (points_mam[4][1]-points_mam[5][1])**2) / facteur
+                long_trayon_g = np.sqrt((points_mam[0][0] - points_mam[1][0]) ** 2 + (points_mam[0][1] - points_mam[1][1]) ** 2) / facteur
+                long_trayon_d = np.sqrt((points_mam[2][0] - points_mam[3][0]) ** 2 + (points_mam[2][1] - points_mam[3][1]) ** 2) / facteur
+                # Diamètre estimé (approximation)
+                diam_trayon = (long_trayon_g + long_trayon_d) / 4
+                # Largeur de l'attache
+                attache_px = np.sqrt((points_mam[4][0] - points_mam[5][0]) ** 2 + (points_mam[4][1] - points_mam[5][1]) ** 2) / facteur
                 # Symétrie
                 symetrie = "Symétrique" if abs(long_trayon_g - long_trayon_d) < 0.5 else "Asymétrique"
 
@@ -1823,25 +1843,45 @@ def page_analyse():
                 st.session_state['attache'] = attache_px
                 st.session_state['symetrie'] = symetrie
 
-        # Saisie manuelle mamelles (clés uniques modifiées)
+        # Saisie manuelle mamelles (clés déjà uniques)
         st.subheader("📏 Saisie manuelle mamelles")
         col1, col2 = st.columns(2)
         with col1:
-            long_trayon = st.number_input("Longueur trayon (cm)", min_value=1.0, max_value=15.0,
-                                          value=st.session_state.get('long_trayon_g', 5.0), key="long_trayon_mamelle_input")
-            diam_trayon = st.number_input("Diamètre trayon (cm)", min_value=0.5, max_value=5.0,
-                                          value=st.session_state.get('diam_trayon', 2.5), key="diam_trayon_mamelle_input")
+            long_trayon = st.number_input(
+                "Longueur trayon (cm)",
+                min_value=1.0, max_value=15.0,
+                value=st.session_state.get('long_trayon_g', 5.0),
+                key="long_trayon_mamelle_input"
+            )
+            diam_trayon = st.number_input(
+                "Diamètre trayon (cm)",
+                min_value=0.5, max_value=5.0,
+                value=st.session_state.get('diam_trayon', 2.5),
+                key="diam_trayon_mamelle_input"
+            )
         with col2:
-            symetrie = st.selectbox("Symétrie", ["Symétrique", "Asymétrique"],
-                                    index=0 if st.session_state.get('symetrie','Symétrique')=="Symétrique" else 1, key="symetrie_mamelle")
-            attache = st.selectbox("Attache", ["Solide", "Moyenne", "Pendante"], key="attache_mamelle")
-            forme = st.selectbox("Forme", ["Globuleuse", "Bifide", "Poire"], key="forme_mamelle")
+            symetrie = st.selectbox(
+                "Symétrie",
+                ["Symétrique", "Asymétrique"],
+                index=0 if st.session_state.get('symetrie', 'Symétrique') == "Symétrique" else 1,
+                key="symetrie_mamelle"
+            )
+            attache = st.selectbox(
+                "Attache",
+                ["Solide", "Moyenne", "Pendante"],
+                key="attache_mamelle"
+            )
+            forme = st.selectbox(
+                "Forme",
+                ["Globuleuse", "Bifide", "Poire"],
+                key="forme_mamelle"
+            )
 
-        if st.button("🥛 Calculer score mamelle"):
+        if st.button("🥛 Calculer score mamelle", key="mam_calculer"):
             score_mam = OvinScience.calcul_score_mamelle(long_trayon, diam_trayon, symetrie, attache, forme)
             st.metric("Score mamelles", f"{score_mam}/10")
             # Sauvegarde dans la base
-            if st.button("💾 Enregistrer mesures mamelles"):
+            if st.button("💾 Enregistrer mesures mamelles", key="mam_sauvegarder"):
                 db.execute("""
                     INSERT INTO mesures_mamelles 
                     (brebis_id, date_mesure, longueur_trayon, diametre_trayon, symetrie, attache, forme, score_total)
