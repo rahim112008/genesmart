@@ -1447,76 +1447,73 @@ def page_analyse():
                 if facteur is not None:
                     st.session_state.facteur_echelle = facteur
 
-       # --- Outil interactif pour les points anatomiques ---
-if st.session_state.image_originale is not None:
-    st.subheader("🖱️ Cliquez sur les points anatomiques")
-    st.write("Utilisez le canvas ci-dessous pour placer des points sur l'image. Dessinez en mode 'point'.")
-    
-    # Redimensionner l'image pour le canvas (max 600px de large) pour éviter les problèmes de mémoire
-    img_orig = st.session_state.image_originale
-    h, w = img_orig.shape[:2]
-    max_width = 600
-    if w > max_width:
-        ratio = max_width / w
-        new_h = int(h * ratio)
-        img_resized = cv2.resize(img_orig, (max_width, new_h))
-    else:
-        img_resized = img_orig.copy()
-    
-    # Convertir en RGB pour le canvas
-    img_rgb = cv2.cvtColor(img_resized, cv2.COLOR_BGR2RGB)
-    
-    # Créer une image PIL
-    pil_image = Image.fromarray(img_rgb)
-    
-    # Canvas avec gestion d'erreur
-    try:
-        canvas_result = st_canvas(
-            fill_color="rgba(255, 165, 0, 0.3)",
-            stroke_width=3,
-            stroke_color="#FF0000",
-            background_image=pil_image,
-            update_streamlit=True,
-            height=400,
-            width=max_width,
-            drawing_mode="point",
-            key="canvas_anat",
-        )
-    except Exception as e:
-        st.error(f"Erreur lors de l'affichage du canvas : {e}")
-        st.stop()
-    
-    if canvas_result and canvas_result.json_data is not None:
-        objects = canvas_result.json_data["objects"]
-        points = []
-        for obj in objects:
-            if obj["type"] == "circle":
-                x = obj["left"]
-                y = obj["top"]
-                # Recalibrer les coordonnées si l'image a été redimensionnée
-                if w > max_width:
-                    x = int(x * w / max_width)
-                    y = int(y * w / max_width)  # attention au facteur d'échelle différent si hauteur aussi redimensionnée
-                points.append((x, y))
-        if len(points) >= 3:
-            st.success(f"{len(points)} points détectés. Les trois premiers sont utilisés comme : garrot, épaule, fesse.")
-            st.session_state.points_utilisateur = {
-                'garrot': points[0],
-                'epaule': points[1],
-                'fesse': points[2]
-            }
-            if st.session_state.facteur_echelle:
-                facteur = st.session_state.facteur_echelle
-                ep_fesse = np.sqrt((points[1][0]-points[2][0])**2 + (points[1][1]-points[2][1])**2)
-                long_cm = ep_fesse / facteur
-                st.info(f"Longueur estimée (épaule-fesse) : {long_cm:.1f} cm")
-                st.session_state['longueur_corps'] = long_cm
+               # --- Outil interactif pour les points anatomiques ---
+        if st.session_state.image_originale is not None:
+            st.subheader("🖱️ Cliquez sur les points anatomiques")
+            st.write("Utilisez le canvas ci-dessous pour placer des points sur l'image. Dessinez en mode 'point'.")
+            
+            # Redimensionner l'image pour le canvas (max 600px de large)
+            img_orig = st.session_state.image_originale
+            h, w = img_orig.shape[:2]
+            max_width = 600
+            if w > max_width:
+                ratio = max_width / w
+                new_h = int(h * ratio)
+                img_resized = cv2.resize(img_orig, (max_width, new_h))
             else:
-                st.warning("Facteur d'échelle non défini. Détectez d'abord l'étalon.")
+                img_resized = img_orig.copy()
+            
+            # Convertir en RGB pour le canvas
+            img_rgb = cv2.cvtColor(img_resized, cv2.COLOR_BGR2RGB)
+            pil_image = Image.fromarray(img_rgb)
+            
+            try:
+                canvas_result = st_canvas(
+                    fill_color="rgba(255, 165, 0, 0.3)",
+                    stroke_width=3,
+                    stroke_color="#FF0000",
+                    background_image=pil_image,
+                    update_streamlit=True,
+                    height=400,
+                    width=max_width,
+                    drawing_mode="point",
+                    key="canvas_anat",
+                )
+            except Exception as e:
+                st.error(f"Erreur lors de l'affichage du canvas : {e}")
+                st.stop()
+            
+            if canvas_result and canvas_result.json_data is not None:
+                objects = canvas_result.json_data["objects"]
+                points = []
+                for obj in objects:
+                    if obj["type"] == "circle":
+                        x = obj["left"]
+                        y = obj["top"]
+                        # Recalibrer les coordonnées si l'image a été redimensionnée
+                        if w > max_width:
+                            x = int(x * w / max_width)
+                            y = int(y * w / max_width)  # car redimension proportionnelle
+                        points.append((x, y))
+                if len(points) >= 3:
+                    st.success(f"{len(points)} points détectés. Les trois premiers sont utilisés comme : garrot, épaule, fesse.")
+                    st.session_state.points_utilisateur = {
+                        'garrot': points[0],
+                        'epaule': points[1],
+                        'fesse': points[2]
+                    }
+                    if st.session_state.facteur_echelle:
+                        facteur = st.session_state.facteur_echelle
+                        ep_fesse = np.sqrt((points[1][0]-points[2][0])**2 + (points[1][1]-points[2][1])**2)
+                        long_cm = ep_fesse / facteur
+                        st.info(f"Longueur estimée (épaule-fesse) : {long_cm:.1f} cm")
+                        st.session_state['longueur_corps'] = long_cm
+                    else:
+                        st.warning("Facteur d'échelle non défini. Détectez d'abord l'étalon.")
+                else:
+                    st.info("Cliquez sur l'image pour placer au moins trois points (garrot, épaule, fesse).")
         else:
-            st.info("Cliquez sur l'image pour placer au moins trois points (garrot, épaule, fesse).")
-else:
-    st.warning("Aucune image chargée. Veuillez d'abord télécharger ou prendre une photo.")
+            st.warning("Aucune image chargée. Veuillez d'abord télécharger ou prendre une photo.")
 
         # --- Saisie manuelle des mesures (toujours disponible) ---
         st.subheader("📏 Saisie manuelle (sécurité)")
