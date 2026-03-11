@@ -1447,71 +1447,72 @@ def page_analyse():
                 if facteur is not None:
                     st.session_state.facteur_echelle = facteur
 
-               # --- Outil interactif pour les points anatomiques ---
+                      # --- Outil interactif pour les points anatomiques avec clics ---
         if st.session_state.image_originale is not None:
             st.subheader("🖱️ Cliquez sur les points anatomiques")
-            st.write("Utilisez le canvas ci-dessous pour placer des points sur l'image. Dessinez en mode 'point'.")
+            st.write("Cliquez d'abord sur le **garrot**, puis sur l'**épaule**, puis sur la **fesse** (dans cet ordre).")
             
-            # Redimensionner l'image pour le canvas (max 600px de large)
+            # Redimensionner l'image pour l'affichage (max 600px de large)
             img_orig = st.session_state.image_originale
-            h, w = img_orig.shape[:2]
-            max_width = 600
-            if w > max_width:
-                ratio = max_width / w
-                new_h = int(h * ratio)
-                img_resized = cv2.resize(img_orig, (max_width, new_h))
+            h_orig, w_orig = img_orig.shape[:2]
+            max_display_size = 600
+            if w_orig > max_display_size:
+                scale = max_display_size / w_orig
+                display_w = max_display_size
+                display_h = int(h_orig * scale)
+                img_display = cv2.resize(img_orig, (display_w, display_h))
             else:
-                img_resized = img_orig.copy()
+                img_display = img_orig
+                display_w, display_h = w_orig, h_orig
             
-            # Convertir en RGB pour le canvas
-            img_rgb = cv2.cvtColor(img_resized, cv2.COLOR_BGR2RGB)
-            pil_image = Image.fromarray(img_rgb)
+            # Convertir en RGB pour l'affichage
+            img_rgb = cv2.cvtColor(img_display, cv2.COLOR_BGR2RGB)
             
-            try:
-                canvas_result = st_canvas(
-                    fill_color="rgba(255, 165, 0, 0.3)",
-                    stroke_width=3,
-                    stroke_color="#FF0000",
-                    background_image=pil_image,
-                    update_streamlit=True,
-                    height=400,
-                    width=max_width,
-                    drawing_mode="point",
-                    key="canvas_anat",
-                )
-            except Exception as e:
-                st.error(f"Erreur lors de l'affichage du canvas : {e}")
-                st.stop()
+            from streamlit_image_coordinates import streamlit_image_coordinates
+            coord = streamlit_image_coordinates(img_rgb, key="image_coord")
             
-            if canvas_result and canvas_result.json_data is not None:
-                objects = canvas_result.json_data["objects"]
-                points = []
-                for obj in objects:
-                    if obj["type"] == "circle":
-                        x = obj["left"]
-                        y = obj["top"]
-                        # Recalibrer les coordonnées si l'image a été redimensionnée
-                        if w > max_width:
-                            x = int(x * w / max_width)
-                            y = int(y * w / max_width)  # car redimension proportionnelle
-                        points.append((x, y))
-                if len(points) >= 3:
-                    st.success(f"{len(points)} points détectés. Les trois premiers sont utilisés comme : garrot, épaule, fesse.")
+            if coord is not None:
+                x_display, y_display = coord["x"], coord["y"]
+                # Recalibrer à l'image originale
+                x_orig = int(x_display * w_orig / display_w)
+                y_orig = int(y_display * h_orig / display_h)
+                
+                # Initialiser la liste des points dans session_state si pas déjà fait
+                if "points_clic" not in st.session_state:
+                    st.session_state.points_clic = []
+                
+                col1, col2 = st.columns([1, 3])
+                with col1:
+                    if st.button("➕ Ajouter ce point"):
+                        st.session_state.points_clic.append((x_orig, y_orig))
+                        st.success(f"Point {len(st.session_state.points_clic)} ajouté")
+                with col2:
+                    if st.button("🗑️ Effacer le dernier point"):
+                        if st.session_state.points_clic:
+                            st.session_state.points_clic.pop()
+                            st.success("Dernier point effacé")
+                
+                # Afficher les points déjà enregistrés
+                if st.session_state.points_clic:
+                    st.write("Points enregistrés :")
+                    for i, (px, py) in enumerate(st.session_state.points_clic):
+                        st.write(f"Point {i+1}: ({px}, {py})")
+                
+                # Si au moins 3 points, les assigner
+                if len(st.session_state.points_clic) >= 3:
                     st.session_state.points_utilisateur = {
-                        'garrot': points[0],
-                        'epaule': points[1],
-                        'fesse': points[2]
+                        'garrot': st.session_state.points_clic[0],
+                        'epaule': st.session_state.points_clic[1],
+                        'fesse': st.session_state.points_clic[2]
                     }
                     if st.session_state.facteur_echelle:
                         facteur = st.session_state.facteur_echelle
-                        ep_fesse = np.sqrt((points[1][0]-points[2][0])**2 + (points[1][1]-points[2][1])**2)
+                        ep_fesse = np.sqrt((st.session_state.points_clic[1][0]-st.session_state.points_clic[2][0])**2 + (st.session_state.points_clic[1][1]-st.session_state.points_clic[2][1])**2)
                         long_cm = ep_fesse / facteur
                         st.info(f"Longueur estimée (épaule-fesse) : {long_cm:.1f} cm")
                         st.session_state['longueur_corps'] = long_cm
                     else:
                         st.warning("Facteur d'échelle non défini. Détectez d'abord l'étalon.")
-                else:
-                    st.info("Cliquez sur l'image pour placer au moins trois points (garrot, épaule, fesse).")
         else:
             st.warning("Aucune image chargée. Veuillez d'abord télécharger ou prendre une photo.")
 
