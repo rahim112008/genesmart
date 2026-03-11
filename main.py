@@ -1850,7 +1850,7 @@ def page_analyse():
                 st.session_state['attache'] = attache_px
                 st.session_state['symetrie'] = symetrie
 
-        # Saisie manuelle mamelles (avec bornes de sécurité)
+                # Saisie manuelle mamelles
         st.subheader("📏 Saisie manuelle mamelles")
         col1, col2 = st.columns(2)
         with col1:
