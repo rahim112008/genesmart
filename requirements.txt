@@ -14,6 +14,9 @@ joblib
 ydata-profiling
 streamlit-pandas-profiling
 streamlit-drawable-canvas
+streamlit-image-coordinates
 tensorflow
 matplotlib
 python-dotenv
+
+
