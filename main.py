@@ -1508,9 +1508,9 @@ def page_analyse():
                 long_trayon_g = min(15.0, long_trayon_g)
                 long_trayon_d = min(15.0, long_trayon_d)
                 diam_trayon = (long_trayon_g + long_trayon_d) / 4
-                diam_trayon = min(5.0, diam_trayon)  # ne pas dépasser 5 cm
+                diam_trayon = min(5.0, diam_trayon)
                 attache_px = np.sqrt((points_mamelles[4][0]-points_mamelles[5][0])**2 + (points_mamelles[4][1]-points_mamelles[5][1])**2) / facteur
-                attache_px = min(30.0, attache_px)  # limite optionnelle
+                attache_px = min(30.0, attache_px)
                 symetrie = "Symétrique" if abs(long_trayon_g - long_trayon_d) < 0.5 else "Asymétrique"
                 mesures['long_trayon_g'] = long_trayon_g
                 mesures['long_trayon_d'] = long_trayon_d
@@ -1581,60 +1581,92 @@ def page_analyse():
 
     if st.button("🧮 Calculer les scores"):
         score_morpho = OvinScience.calcul_score_morpho(longueur, hauteur, poitrine, canon, bassin)
-        score_mam = OvinScience.calcul_score_mamelle(long_trayon_g, diam_trayon, symetrie, attache, forme)
+        score_mam = OvinScience.calcul_score_mamelle((long_trayon_g+long_trayon_d)/2, diam_trayon, symetrie, attache, forme)
         st.metric("Score morphologique", f"{score_morpho}/100")
         st.metric("Score mamelles", f"{score_mam}/10")
-        # Vous pouvez ajouter ici la sauvegarde en base avec brebis_id, par exemple :
-        # if st.button("💾 Enregistrer dans la base"):
-        #     db.execute(...)
-       
+
+    # -------------------------------------------------------------------------
+    # ESTIMATIONS AVANCÉES (lait, composition, poids)
+    # -------------------------------------------------------------------------
+    st.header("🔮 Estimations avancées")
+    condition_corporelle = st.slider("Condition corporelle (1-5)", 1.0, 5.0, 3.0, 0.5, key="cond_corp")
+    if st.button("Estimer production laitière et composition corporelle"):
+        # Récupérer les valeurs des champs (via session_state pour être sûr)
+        longueur_val = st.session_state.get('longueur_corps_input', 70.0)
+        hauteur_val = st.session_state.get('hauteur_garrot_input', 65.0)
+        poitrine_val = st.session_state.get('tour_poitrine_input', 80.0)
+        canon_val = st.session_state.get('circonf_canon_input', 8.0)
+        bassin_val = st.session_state.get('largeur_bassin_input', 20.0)
+        # Poids estimé
+        poids_estime = (longueur_val * poitrine_val * hauteur_val) / 3000
+        st.metric("Poids estimé (kg)", f"{poids_estime:.1f}")
+        # Composition
+        comp = OvinScience.estimer_composition(poids_estime, race_brebis, condition_corporelle)
+        st.subheader("Composition corporelle")
+        col1, col2, col3 = st.columns(3)
+        col1.metric("Viande (kg)", f"{comp['viande']['kg']:.1f}")
+        col2.metric("Graisse (kg)", f"{comp['graisse']['kg']:.1f}")
+        col3.metric("Os (kg)", f"{comp['os']['kg']:.1f}")
+        st.write(f"Rendement carcasse : {comp['rendement']}%")
+        # Production laitière
+        # Scores à partir des valeurs
+        score_morpho = OvinScience.calcul_score_morpho(longueur_val, hauteur_val, poitrine_val, canon_val, bassin_val)
+        long_trayon_g_val = st.session_state.get('long_trayon_g_input', 5.0)
+        long_trayon_d_val = st.session_state.get('long_trayon_d_input', 5.0)
+        diam_trayon_val = st.session_state.get('diam_trayon_input', 2.5)
+        symetrie_val = st.session_state.get('symetrie_input', 'Symétrique')
+        attache_val = st.session_state.get('attache_input', 10.0)
+        forme_val = st.session_state.get('forme_input', 'Globuleuse')
+        long_trayon_moy = (long_trayon_g_val + long_trayon_d_val) / 2
+        score_mam = OvinScience.calcul_score_mamelle(long_trayon_moy, diam_trayon_val, symetrie_val, attache_val, forme_val)
+        lait = MachineLearning.predire_lait(score_mam, score_morpho, race_brebis, age_mois//12)
+        st.subheader("Production laitière estimée")
+        st.metric("Litres par jour", f"{lait['litres_jour']:.2f}")
+        st.metric("Litres par lactation", f"{lait['litres_lactation']:.2f}")
+        st.info(f"Niveau : {lait['niveau']}")
 
 # -----------------------------------------------------------------------------
-# Les autres pages (gestion élevage, production, génomique avancée, santé, reproduction, nutrition, export, élite, IA, apprentissage)
-# Sont reprises ici, mais pour des raisons de longueur, nous ne les recopions pas intégralement.
-# Vous devez conserver les versions précédentes de ces pages (elles fonctionnent).
+# PAGES MANQUANTES (à remplacer par vos vraies pages si vous les avez)
 # -----------------------------------------------------------------------------
-
 def page_gestion_elevage():
-    # ... (code existant)
-    st.write("Page Gestion élevage")  # placeholder, remplacez par votre code
-    pass
+    st.title("🐑 Gestion élevage")
+    st.info("Cette page est en cours de développement. Revenez plus tard.")
 
 def page_production():
-    st.write("Page Production laitière")
-    pass
+    st.title("🥛 Production laitière")
+    st.info("Cette page est en cours de développement. Revenez plus tard.")
 
 def page_genomique_avancee():
-    st.write("Page Génomique avancée")
-    pass
+    st.title("🧬 Génomique avancée")
+    st.info("Cette page est en cours de développement. Revenez plus tard.")
 
 def page_sante():
-    st.write("Page Santé")
-    pass
+    st.title("🏥 Santé")
+    st.info("Cette page est en cours de développement. Revenez plus tard.")
 
 def page_reproduction():
-    st.write("Page Reproduction")
-    pass
+    st.title("🤰 Reproduction")
+    st.info("Cette page est en cours de développement. Revenez plus tard.")
 
 def page_nutrition_avancee():
-    st.write("Page Nutrition avancée")
-    pass
+    st.title("🌾 Nutrition avancée")
+    st.info("Cette page est en cours de développement. Revenez plus tard.")
 
 def page_export():
-    st.write("Page Export")
-    pass
+    st.title("📤 Export données")
+    st.info("Cette page est en cours de développement. Revenez plus tard.")
 
 def page_elite():
-    st.write("Page Élite")
-    pass
+    st.title("🏆 Élite et comparaison")
+    st.info("Cette page est en cours de développement. Revenez plus tard.")
 
 def page_ia():
-    st.write("Page IA & Data Mining")
-    pass
+    st.title("🧠 IA & Data Mining")
+    st.info("Cette page est en cours de développement. Revenez plus tard.")
 
 def page_apprentissage():
-    st.write("Page Apprentissage automatique")
-    pass
+    st.title("🧠 Apprentissage automatique")
+    st.info("Cette page est en cours de développement. Revenez plus tard.")
 
 # -----------------------------------------------------------------------------
 # SIDEBAR ET MAIN
