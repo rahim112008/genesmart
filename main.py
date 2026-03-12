@@ -1767,27 +1767,30 @@ def page_gestion_elevage():
                     elevage_choice = st.selectbox("Élevage", list(elevages_dict.keys()))
                     numero_id = st.text_input("Numéro d'identification (obligatoire)")
                     
-                    # Âge : choix entre date et dentition
-age_mode = st.radio("Mode de saisie de l'âge", ["Date de naissance", "Dentition"])
-date_naissance = None
+                                       # Âge : choix entre date et dentition
+                    age_mode = st.radio("Mode de saisie de l'âge", ["Date de naissance", "Dentition"])
+                    date_naissance = None
 
-if age_mode == "Date de naissance":
-    date_naissance = st.date_input("Date de naissance", value=datetime.today().date())
-else:
-    dentition = st.selectbox("Dentition", ["Dents de lait", "2 dents", "4 dents", "6 dents ou plus"])
-    # Estimation de l'âge en mois selon la dentition
-    if dentition == "Dents de lait":
-        age_estime_mois = 6
-    elif dentition == "2 dents":
-        age_estime_mois = 18
-    elif dentition == "4 dents":
-        age_estime_mois = 30
-    else:  # 6 dents ou plus
-        age_estime_mois = 48
-    # Calcul de la date approximative (on soustrait l'âge estimé à aujourd'hui)
-    date_naissance = datetime.today().date() - timedelta(days=age_estime_mois * 30)
-    # Affichage de la date estimée (champ non modifiable)
-    st.date_input("Date estimée (d'après dentition)", value=date_naissance, disabled=True)
+                    if age_mode == "Date de naissance":
+                        date_naissance = st.date_input("Date de naissance", value=datetime.today().date())
+                    else:
+                        dentition = st.selectbox("Dentition", ["Dents de lait", "2 dents", "4 dents", "6 dents ou plus"])
+                        if dentition == "Dents de lait":
+                            age_estime_mois = 6
+                        elif dentition == "2 dents":
+                            age_estime_mois = 18
+                        elif dentition == "4 dents":
+                            age_estime_mois = 30
+                        else:
+                            age_estime_mois = 48
+                        date_naissance = datetime.today().date() - timedelta(days=age_estime_mois * 30)
+                        st.date_input("Date estimée (d'après dentition)", value=date_naissance, disabled=True)
+
+                    race = st.selectbox("Race", list(Config.RACES.keys()))
+                    etat_physio = st.selectbox("État physiologique", Config.ETATS_PHYSIO)
+                    photo_profil = st.file_uploader("Photo de profil (optionnelle)", type=['jpg','png','jpeg'])
+                    photo_mamelle = st.file_uploader("Photo mamelle (optionnelle)", type=['jpg','png','jpeg'])
+                    poids_vif = st.number_input("Poids vif (kg) (optionnel)", min_value=0.0, value=0.0, step=0.5)
                     
                     race = st.selectbox("Race", list(Config.RACES.keys()))
                     etat_physio = st.selectbox("État physiologique", Config.ETATS_PHYSIO)
