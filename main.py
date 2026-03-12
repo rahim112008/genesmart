@@ -1292,9 +1292,9 @@ def page_prediction():
 def page_analyse():
     st.title("📸 Analyse Photogrammétrique")
 
-    # Initialisation des variables de session pour le guidage
+    # Initialisation des variables de session pour le guidage séquentiel
     if 'etape_corps' not in st.session_state:
-        st.session_state.etape_corps = 0  # 0: droite, 1: gauche, 2: arriere, 3: terminé
+        st.session_state.etape_corps = 0  # 0: droite, 1: gauche, 2: arriere, 3: mamelles, 4: terminé
     if 'photos_corps' not in st.session_state:
         st.session_state.photos_corps = {}  # clé = vue, valeur = image
     if 'points_par_vue' not in st.session_state:
@@ -1302,30 +1302,35 @@ def page_analyse():
     if 'facteur_global' not in st.session_state:
         st.session_state.facteur_global = None
 
-    # Valeurs par défaut pour les mesures
+    # Valeurs par défaut pour les mesures (corps et mamelles)
     for k, v in [('longueur_corps', 70.0), ('hauteur_garrot', 65.0), ('tour_poitrine', 80.0),
                  ('circonf_canon', 8.0), ('largeur_bassin', 20.0), ('longueur_queue', 20.0),
                  ('largeur_thorax', 25.0), ('profondeur_thorax', 30.0)]:
         if k not in st.session_state:
             st.session_state[k] = v
+    for k, v in [('long_trayon_g', 5.0), ('long_trayon_d', 5.0), ('diam_trayon', 2.5),
+                 ('attache', 10.0), ('symetrie', 'Symétrique'), ('forme', 'Globuleuse')]:
+        if k not in st.session_state:
+            st.session_state[k] = v
 
-    # Récupération des infos de la brebis (à adapter selon votre base)
-    # Exemple factice, à remplacer par vos vraies variables
+    # Variables factices pour l'exemple (remplacez-les par les vraies valeurs de votre sélection de brebis)
     age_mois = 24
     race_brebis = "Ouled Djellal"
     brebis_id = 1
 
     # -------------------------------------------------------------------------
-    # ONGLET 1 : MORPHOMÉTRIE CORPS (guidage séquentiel)
+    # MORPHOMÉTRIE CORPS ET MAMELLES (guidage séquentiel)
     # -------------------------------------------------------------------------
-    st.header("Morphométrie Corps")
+    st.header("Morphométrie Corps et Mamelles")
 
-    vues_ordre = ["droite", "gauche", "arriere"]
-    noms_vues = ["côté droit", "côté gauche", "arrière (bassin/queue)"]
+    vues_ordre = ["droite", "gauche", "arriere", "mamelles"]
+    noms_vues = ["côté droit", "côté gauche", "arrière (bassin/queue)", "arrière (mamelles)"]
     points_par_vue = {
         "droite": {"noms": ["Garrot", "Sol", "Épaule", "Fesse", "Queue", "Canon haut", "Canon bas"], "total": 7},
         "gauche": {"noms": ["Garrot", "Sol", "Épaule", "Fesse", "Queue", "Canon haut", "Canon bas"], "total": 7},
-        "arriere": {"noms": ["Bassin gauche", "Bassin droit", "Thorax gauche", "Thorax droit"], "total": 4}
+        "arriere": {"noms": ["Bassin gauche", "Bassin droit", "Thorax gauche", "Thorax droit"], "total": 4},
+        "mamelles": {"noms": ["Base trayon gauche", "Extrémité trayon gauche", "Base trayon droit",
+                               "Extrémité trayon droit", "Attache gauche", "Attache droite"], "total": 6}
     }
 
     # Barre de progression
@@ -1469,6 +1474,7 @@ def page_analyse():
             points_gauche = st.session_state.points_par_vue.get('gauche', [])
             points_droite = st.session_state.points_par_vue.get('droite', [])
             points_arriere = st.session_state.points_par_vue.get('arriere', [])
+            points_mamelles = st.session_state.points_par_vue.get('mamelles', [])
 
             # On utilise le profil qui a le plus de points
             profil_points = points_gauche if len(points_gauche) >= len(points_droite) else points_droite
@@ -1495,14 +1501,26 @@ def page_analyse():
                 tour_px = np.pi * np.sqrt((mesures['largeur_thorax']**2 + profondeur_estimee**2) / 2)
                 mesures['tour_poitrine'] = max(40.0, tour_px)
 
+            if len(points_mamelles) >= 6:
+                long_trayon_g = np.sqrt((points_mamelles[0][0]-points_mamelles[1][0])**2 + (points_mamelles[0][1]-points_mamelles[1][1])**2) / facteur
+                long_trayon_d = np.sqrt((points_mamelles[2][0]-points_mamelles[3][0])**2 + (points_mamelles[2][1]-points_mamelles[3][1])**2) / facteur
+                diam_trayon = (long_trayon_g + long_trayon_d) / 4
+                attache_px = np.sqrt((points_mamelles[4][0]-points_mamelles[5][0])**2 + (points_mamelles[4][1]-points_mamelles[5][1])**2) / facteur
+                symetrie = "Symétrique" if abs(long_trayon_g - long_trayon_d) < 0.5 else "Asymétrique"
+                mesures['long_trayon_g'] = long_trayon_g
+                mesures['long_trayon_d'] = long_trayon_d
+                mesures['diam_trayon'] = diam_trayon
+                mesures['attache'] = attache_px
+                mesures['symetrie'] = symetrie
+
             # Mettre à jour session_state
             for k, v in mesures.items():
                 st.session_state[k] = v
 
-            st.write("Mesures corporelles calculées :")
+            st.write("Mesures calculées :")
             st.json(mesures)
 
-            if st.button("🔄 Recommencer les photos du corps"):
+            if st.button("🔄 Recommencer les photos"):
                 st.session_state.etape_corps = 0
                 st.session_state.photos_corps = {}
                 st.session_state.points_par_vue = {}
@@ -1515,173 +1533,55 @@ def page_analyse():
                 st.rerun()
 
     # -------------------------------------------------------------------------
-    # ONGLET 2 : ANALYSE MAMELLES (indépendant)
+    # SAISIE MANUELLE (toujours disponible, pré-remplie avec les valeurs calculées)
     # -------------------------------------------------------------------------
-    st.header("🥛 Analyse Mamelles")
+    st.header("📏 Saisie manuelle (sécurité)")
 
-    if 'points_mam' not in st.session_state:
-        st.session_state.points_mam = []
-    if 'etape_mam' not in st.session_state:
-        st.session_state.etape_mam = 0
-
-    # Chargement de la photo mamelle
-    st.write("### Chargement de la photo mamelle")
-    source_mam = st.radio("Source", ["Télécharger un fichier", "Prendre une photo"], key="source_mam")
-    img_mam = None
-    if source_mam == "Télécharger un fichier":
-        uploaded_mam = st.file_uploader("Choisir une photo mamelle", type=['jpg','png','jpeg'], key="upload_mam")
-        if uploaded_mam:
-            img_pil = Image.open(uploaded_mam)
-            img_mam = cv2.cvtColor(np.array(img_pil), cv2.COLOR_RGB2BGR)
-    else:
-        cam_mam = st.camera_input("Prendre une photo mamelle", key="cam_mam")
-        if cam_mam:
-            img_pil = Image.open(cam_mam)
-            img_mam = cv2.cvtColor(np.array(img_pil), cv2.COLOR_RGB2BGR)
-
-    if img_mam is not None:
-        st.image(cv2.cvtColor(img_mam, cv2.COLOR_BGR2RGB), caption="Image mamelle", use_column_width=True)
-
-        # Facteur d'échelle (on peut réutiliser le facteur global)
-        facteur_mam = st.number_input("Facteur d'échelle (px/cm)", value=st.session_state.facteur_global or 10.0, key="mam_facteur")
-
-        # Points mamelles
-        st.write("### Cliquez sur les points mamelles")
-        st.write("Ordre : Base trayon gauche → Extrémité trayon gauche → Base trayon droit → Extrémité trayon droit → Attache gauche → Attache droite")
-
-        h_orig, w_orig = img_mam.shape[:2]
-        max_display = 600
-        if w_orig > max_display:
-            scale = max_display / w_orig
-            display_w = max_display
-            display_h = int(h_orig * scale)
-            img_display = cv2.resize(img_mam, (display_w, display_h))
-        else:
-            img_display = img_mam
-            display_w, display_h = w_orig, h_orig
-        img_rgb = cv2.cvtColor(img_display, cv2.COLOR_BGR2RGB)
-
-        points_mam = st.session_state.points_mam
-        etape_mam = st.session_state.etape_mam
-        noms_points_mam = ["Base trayon gauche", "Extrémité trayon gauche", "Base trayon droit",
-                           "Extrémité trayon droit", "Attache gauche", "Attache droite"]
-
-        if etape_mam < len(noms_points_mam):
-            st.write(f"**Étape {etape_mam+1}/{len(noms_points_mam)}** : cliquez sur **{noms_points_mam[etape_mam]}**")
-        else:
-            st.success("Tous les points ont été collectés !")
-
-        coord = streamlit_image_coordinates(img_rgb, key="mam_coord")
-        if coord:
-            x_display, y_display = coord["x"], coord["y"]
-            x_orig = int(x_display * w_orig / display_w)
-            y_orig = int(y_display * h_orig / display_h)
-
-            col1, col2 = st.columns(2)
-            with col1:
-                if st.button("✅ Valider ce point", key="mam_valider"):
-                    points_mam.append((x_orig, y_orig))
-                    if etape_mam < len(noms_points_mam) - 1:
-                        st.session_state.etape_mam = etape_mam + 1
-                    else:
-                        st.session_state.etape_mam = len(noms_points_mam)
-                    st.rerun()
-            with col2:
-                if st.button("⬅️ Annuler dernier point", key="mam_annuler"):
-                    if points_mam:
-                        points_mam.pop()
-                        if etape_mam > 0:
-                            st.session_state.etape_mam = etape_mam - 1
-                    st.rerun()
-
-        if points_mam:
-            st.write("Points enregistrés :")
-            for i, (px, py) in enumerate(points_mam):
-                st.write(f"{noms_points_mam[i] if i < len(noms_points_mam) else 'Point supplémentaire'}: ({px}, {py})")
-
-        # Calcul des mesures mamelles
-        if len(points_mam) >= 6:
-            facteur = facteur_mam if facteur_mam > 0 else 1.0
-            long_trayon_g = np.sqrt((points_mam[0][0]-points_mam[1][0])**2 + (points_mam[0][1]-points_mam[1][1])**2) / facteur
-            long_trayon_d = np.sqrt((points_mam[2][0]-points_mam[3][0])**2 + (points_mam[2][1]-points_mam[3][1])**2) / facteur
-            diam_trayon = (long_trayon_g + long_trayon_d) / 4
-            attache_px = np.sqrt((points_mam[4][0]-points_mam[5][0])**2 + (points_mam[4][1]-points_mam[5][1])**2) / facteur
-            symetrie = "Symétrique" if abs(long_trayon_g - long_trayon_d) < 0.5 else "Asymétrique"
-
-            st.success("Mesures mamelles calculées :")
-            st.write(f"Longueur trayon gauche : {long_trayon_g:.1f} cm")
-            st.write(f"Longueur trayon droit : {long_trayon_d:.1f} cm")
-            st.write(f"Diamètre estimé : {diam_trayon:.1f} cm")
-            st.write(f"Largeur attache : {attache_px:.1f} cm")
-            st.write(f"Symétrie : {symetrie}")
-
-            # Stocker pour saisie manuelle
-            st.session_state['long_trayon_g'] = long_trayon_g
-            st.session_state['long_trayon_d'] = long_trayon_d
-            st.session_state['diam_trayon'] = diam_trayon
-            st.session_state['attache'] = attache_px
-            st.session_state['symetrie'] = symetrie
-
-    # --- Saisie manuelle mamelles (sécurité) ---
-    st.subheader("📏 Saisie manuelle mamelles")
     col1, col2 = st.columns(2)
     with col1:
-        long_trayon = st.number_input("Longueur trayon (cm)", min_value=1.0, max_value=15.0,
-                                      value=max(1.0, min(15.0, st.session_state.get('long_trayon_g', 5.0))),
-                                      key="long_trayon_mamelle_input")
-        diam_trayon = st.number_input("Diamètre trayon (cm)", min_value=0.5, max_value=5.0,
-                                      value=max(0.5, min(5.0, st.session_state.get('diam_trayon', 2.5))),
-                                      key="diam_trayon_mamelle_input")
+        longueur = st.number_input("Longueur corps (cm)", min_value=30.0, max_value=120.0,
+                                   value=st.session_state.get('longueur_corps', 70.0), key="longueur_corps_input")
+        hauteur = st.number_input("Hauteur garrot (cm)", min_value=30.0, max_value=90.0,
+                                  value=st.session_state.get('hauteur_garrot', 65.0), key="hauteur_garrot_input")
+        poitrine = st.number_input("Tour de poitrine (cm)", min_value=40.0, max_value=130.0,
+                                   value=st.session_state.get('tour_poitrine', 80.0), key="tour_poitrine_input")
+        canon = st.number_input("Circonférence canon (cm)", min_value=5.0, max_value=15.0,
+                                value=st.session_state.get('circonf_canon', 8.0), key="circonf_canon_input")
     with col2:
+        bassin = st.number_input("Largeur bassin (cm)", min_value=10.0, max_value=40.0,
+                                 value=st.session_state.get('largeur_bassin', 20.0), key="largeur_bassin_input")
+        queue = st.number_input("Longueur queue (cm)", min_value=0.0, max_value=50.0,
+                                value=st.session_state.get('longueur_queue', 20.0), key="longueur_queue_input")
+        largeur_thorax = st.number_input("Largeur thorax (cm)", min_value=10.0, max_value=50.0,
+                                         value=st.session_state.get('largeur_thorax', 25.0), key="largeur_thorax_input")
+        profondeur_thorax = st.number_input("Profondeur thorax (cm)", min_value=10.0, max_value=50.0,
+                                            value=st.session_state.get('profondeur_thorax', 30.0), key="profondeur_thorax_input")
+
+    st.subheader("🥛 Mesures mamelles manuelles")
+    col3, col4 = st.columns(2)
+    with col3:
+        long_trayon_g = st.number_input("Longueur trayon gauche (cm)", min_value=1.0, max_value=15.0,
+                                        value=st.session_state.get('long_trayon_g', 5.0), key="long_trayon_g_input")
+        long_trayon_d = st.number_input("Longueur trayon droit (cm)", min_value=1.0, max_value=15.0,
+                                        value=st.session_state.get('long_trayon_d', 5.0), key="long_trayon_d_input")
+        diam_trayon = st.number_input("Diamètre trayon (cm)", min_value=0.5, max_value=5.0,
+                                      value=st.session_state.get('diam_trayon', 2.5), key="diam_trayon_input")
+    with col4:
+        attache = st.number_input("Largeur attache (cm)", min_value=0.0, max_value=30.0,
+                                  value=st.session_state.get('attache', 10.0), key="attache_input")
         symetrie = st.selectbox("Symétrie", ["Symétrique", "Asymétrique"],
-                                index=0 if st.session_state.get('symetrie','Symétrique')=="Symétrique" else 1,
-                                key="symetrie_mamelle")
-        attache = st.selectbox("Attache", ["Solide", "Moyenne", "Pendante"], key="attache_mamelle")
-        forme = st.selectbox("Forme", ["Globuleuse", "Bifide", "Poire"], key="forme_mamelle")
+                                index=0 if st.session_state.get('symetrie','Symétrique')=="Symétrique" else 1, key="symetrie_input")
+        forme = st.selectbox("Forme", ["Globuleuse", "Bifide", "Poire"],
+                             index=0 if st.session_state.get('forme','Globuleuse')=="Globuleuse" else 1 if st.session_state.get('forme')=="Bifide" else 2, key="forme_input")
 
-    if st.button("🥛 Calculer score mamelle", key="mam_calculer"):
-        score_mam = OvinScience.calcul_score_mamelle(long_trayon, diam_trayon, symetrie, attache, forme)
+    if st.button("🧮 Calculer les scores"):
+        score_morpho = OvinScience.calcul_score_morpho(longueur, hauteur, poitrine, canon, bassin)
+        score_mam = OvinScience.calcul_score_mamelle(long_trayon_g, diam_trayon, symetrie, attache, forme)
+        st.metric("Score morphologique", f"{score_morpho}/100")
         st.metric("Score mamelles", f"{score_mam}/10")
-        # Vous pouvez ajouter ici la sauvegarde en base
-
-    # -------------------------------------------------------------------------
-    # AFFICHAGE DU TABLEAU RÉCAPITULATIF
-    # -------------------------------------------------------------------------
-    st.header("📋 Tableau récapitulatif des mesures")
-
-    recap = {
-        "Longueur corps (cm)": st.session_state.get('longueur_corps', 'N/A'),
-        "Hauteur garrot (cm)": st.session_state.get('hauteur_garrot', 'N/A'),
-        "Tour poitrine (cm)": st.session_state.get('tour_poitrine', 'N/A'),
-        "Circonférence canon (cm)": st.session_state.get('circonf_canon', 'N/A'),
-        "Largeur bassin (cm)": st.session_state.get('largeur_bassin', 'N/A'),
-        "Longueur queue (cm)": st.session_state.get('longueur_queue', 'N/A'),
-        "Largeur thorax (cm)": st.session_state.get('largeur_thorax', 'N/A'),
-        "Profondeur thorax (cm)": st.session_state.get('profondeur_thorax', 'N/A'),
-        "Longueur trayon G (cm)": st.session_state.get('long_trayon_g', 'N/A'),
-        "Longueur trayon D (cm)": st.session_state.get('long_trayon_d', 'N/A'),
-        "Diamètre trayon (cm)": st.session_state.get('diam_trayon', 'N/A'),
-        "Largeur attache (cm)": st.session_state.get('attache', 'N/A'),
-        "Symétrie": st.session_state.get('symetrie', 'N/A'),
-    }
-    df_recap = pd.DataFrame(list(recap.items()), columns=["Mesure", "Valeur"])
-    st.dataframe(df_recap, use_container_width=True, hide_index=True)
-
-    # Calcul du poids estimé
-    if all(k in st.session_state for k in ['longueur_corps', 'hauteur_garrot', 'tour_poitrine']):
-        poids = (st.session_state['longueur_corps'] * st.session_state['tour_poitrine'] * st.session_state['hauteur_garrot']) / 3000
-        st.metric("Poids estimé (kg)", f"{poids:.1f}")
-
-    # Score morphologique
-    if all(k in st.session_state for k in ['longueur_corps', 'hauteur_garrot', 'tour_poitrine', 'circonf_canon', 'largeur_bassin']):
-        score = OvinScience.calcul_score_morpho(
-            st.session_state['longueur_corps'],
-            st.session_state['hauteur_garrot'],
-            st.session_state['tour_poitrine'],
-            st.session_state['circonf_canon'],
-            st.session_state['largeur_bassin']
-        )
-        st.metric("Score morphologique", f"{score}/100")
+        # Vous pouvez ajouter ici la sauvegarde en base avec brebis_id, par exemple :
+        # if st.button("💾 Enregistrer dans la base"):
+        #     db.execute(...)
 
 # -----------------------------------------------------------------------------
 # Les autres pages (gestion élevage, production, génomique avancée, santé, reproduction, nutrition, export, élite, IA, apprentissage)
