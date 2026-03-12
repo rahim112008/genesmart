@@ -1607,6 +1607,7 @@ def page_analyse():
 def page_gestion_elevage():
     st.title("🐑 Gestion des élevages")
     
+    # Résumé de l'éleveur actif
     if st.session_state.eleveur_id is not None:
         eleveur = db.fetchone("SELECT nom, region FROM eleveurs WHERE id=?", (st.session_state.eleveur_id,))
         if eleveur:
@@ -1658,6 +1659,7 @@ def page_gestion_elevage():
     
     tab1, tab2, tab3 = st.tabs(["👨‍🌾 Éleveurs", "🏡 Élevages", "🐑 Brebis"])
     
+    # --- Onglet Éleveurs ---
     with tab1:
         st.subheader("Liste des éleveurs")
         
@@ -1698,6 +1700,7 @@ def page_gestion_elevage():
         else:
             st.info("Aucun éleveur enregistré.")
     
+    # --- Onglet Élevages ---
     with tab2:
         st.subheader("Liste des élevages")
         
@@ -1740,9 +1743,11 @@ def page_gestion_elevage():
                 df = pd.DataFrame(elevages, columns=["ID", "Nom", "Localisation", "Superficie", "Éleveur"])
                 st.dataframe(df, use_container_width=True, hide_index=True)
     
+    # --- Onglet Brebis ---
     with tab3:
         st.subheader("Liste des brebis")
         
+        # Récupérer les élevages pour la liste déroulante
         params_elev = [st.session_state.user_id]
         query_elev = """
             SELECT e.id, e.nom, el.nom
@@ -1757,7 +1762,7 @@ def page_gestion_elevage():
         if not elevages_dict:
             st.warning("Aucun élevage pour cet éleveur. Veuillez d'abord ajouter un élevage.")
         else:
-            # Formulaire d'ajout de brebis (expandable)
+            # --- Formulaire d'ajout de brebis ---
             with st.expander("➕ Ajouter une brebis", expanded=False):
                 with st.form("form_brebis"):
                     elevage_choice = st.selectbox("Élevage", list(elevages_dict.keys()))
@@ -1790,7 +1795,7 @@ def page_gestion_elevage():
                     
                     submitted = st.form_submit_button("Ajouter")
                     if submitted and numero_id:
-                        # Vérifier si la colonne poids_vif existe
+                        # Vérifier la colonne poids_vif
                         cursor = db.conn.execute("PRAGMA table_info(brebis)")
                         columns = [col[1] for col in cursor.fetchall()]
                         if 'poids_vif' not in columns:
@@ -1815,10 +1820,10 @@ def page_gestion_elevage():
                     elif submitted and not numero_id:
                         st.error("Le numéro d'identification est obligatoire.")
             
-            # Récupération et affichage de la liste des brebis
+            # --- Affichage et suivi des brebis ---
             params_brebis = [st.session_state.user_id]
             query_brebis = """
-                SELECT b.id, b.numero_id, b.nom, b.race, b.date_naissance, b.etat_physio, e.nom, b.poids_vif, b.photo_profil, b.photo_mamelle
+                SELECT b.id, b.numero_id, b.nom, b.race, b.date_naissance, b.etat_physio, e.nom, b.poids_vif
                 FROM brebis b
                 JOIN elevages e ON b.elevage_id = e.id
                 JOIN eleveurs el ON e.eleveur_id = el.id
@@ -1828,16 +1833,16 @@ def page_gestion_elevage():
             brebis = db.fetchall(query_brebis, params_brebis)
             
             if brebis:
-                df_brebis = pd.DataFrame(brebis, columns=["ID", "Numéro", "Nom", "Race", "Naissance", "État", "Élevage", "Poids vif (kg)", "Photo profil", "Photo mamelle"])
+                df_brebis = pd.DataFrame(brebis, columns=["ID", "Numéro", "Nom", "Race", "Naissance", "État", "Élevage", "Poids vif (kg)"])
                 st.dataframe(df_brebis[["Numéro", "Race", "Naissance", "État", "Élevage", "Poids vif (kg)"]], use_container_width=True, hide_index=True)
                 
                 st.divider()
                 st.subheader("🐑 Suivi individuel")
-                selected_brebis = st.selectbox("Choisir une brebis", [f"{b[0]} - {b[1]}" for b in brebis], key="suivi_select")
+                selected_brebis = st.selectbox("Choisir une brebis", [f"{b[0]} - {b[1]} {b[2]}" for b in brebis], key="suivi_select")
                 bid = int(selected_brebis.split(" - ")[0])
                 
                 # Infos de la brebis sélectionnée
-                brebis_info = db.fetchone("SELECT numero_id, nom, race, date_naissance, poids_vif, photo_profil, photo_mamelle FROM brebis WHERE id=?", (bid,))
+                brebis_info = db.fetchone("SELECT numero_id, nom, race, date_naissance, poids_vif FROM brebis WHERE id=?", (bid,))
                 if brebis_info:
                     col1, col2, col3 = st.columns(3)
                     col1.metric("Numéro", brebis_info[0])
@@ -1917,7 +1922,6 @@ def page_gestion_elevage():
                     else:
                         st.info("Aucune mesure morphométrique.")
                     
-                    # Bouton pour aller à la photogrammétrie
                     if st.button("📸 Aller à la photogrammétrie pour cette brebis"):
                         st.session_state.brebis_analyse_id = bid
                         st.session_state.current_page = "analyse"
