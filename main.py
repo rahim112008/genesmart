@@ -1758,40 +1758,63 @@ def page_gestion_elevage():
             st.warning("Aucun élevage pour cet éleveur. Veuillez d'abord ajouter un élevage.")
         else:
             with st.expander("➕ Ajouter une brebis", expanded=False):
-                with st.form("form_brebis"):
-                    elevage_choice = st.selectbox("Élevage", list(elevages_dict.keys()))
-                    numero_id = st.text_input("Numéro d'identification")
-                    nom_brebis = st.text_input("Nom")
-                    race = st.selectbox("Race", list(Config.RACES.keys()))
-                    date_naissance = st.date_input("Date de naissance", value=datetime.today().date())
-                    etat_physio = st.selectbox("État physiologique", Config.ETATS_PHYSIO)
-                    photo_profil = st.file_uploader("Photo de profil", type=['jpg','png','jpeg'])
-                    photo_mamelle = st.file_uploader("Photo mamelle", type=['jpg','png','jpeg'])
-                    poids_vif = st.number_input("Poids vif (kg)", min_value=0.0, value=45.0, step=0.5)
-                    
-                    submitted = st.form_submit_button("Ajouter")
-                    if submitted:
-                        cursor = db.conn.execute("PRAGMA table_info(brebis)")
-                        columns = [col[1] for col in cursor.fetchall()]
-                        if 'poids_vif' not in columns:
-                            db.execute("ALTER TABLE brebis ADD COLUMN poids_vif REAL")
-                            st.info("Colonne poids_vif ajoutée automatiquement.")
-                        
-                        elevage_id = elevages_dict[elevage_choice]
-                        profil_filename = save_uploaded_photo(photo_profil)
-                        mamelle_filename = save_uploaded_photo(photo_mamelle)
-                        
-                        db.execute("""
-                            INSERT INTO brebis 
-                            (elevage_id, numero_id, nom, race, date_naissance, etat_physio, photo_profil, photo_mamelle, poids_vif)
-                            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
-                        """, (
-                            elevage_id, numero_id, nom_brebis, race, 
-                            date_naissance.isoformat(), etat_physio,
-                            profil_filename, mamelle_filename, poids_vif
-                        ))
-                        st.success("Brebis ajoutée")
-                        st.rerun()
+    with st.form("form_brebis"):
+        elevage_choice = st.selectbox("Élevage", list(elevages_dict.keys()))
+        numero_id = st.text_input("Numéro d'identification (obligatoire)")
+        
+        # Choix du mode de saisie de l'âge
+        age_mode = st.radio("Mode de saisie de l'âge", ["Date de naissance", "Dentition"])
+        date_naissance = None
+        
+        if age_mode == "Date de naissance":
+            date_naissance = st.date_input("Date de naissance", value=datetime.today().date())
+        else:
+            dentition = st.selectbox("Dentition", ["Dents de lait", "2 dents", "4 dents", "6 dents ou plus"])
+            # Estimation de l'âge en mois selon la dentition
+            if dentition == "Dents de lait":
+                age_estime_mois = 6
+            elif dentition == "2 dents":
+                age_estime_mois = 18
+            elif dentition == "4 dents":
+                age_estime_mois = 30
+            else:  # 6 dents ou plus
+                age_estime_mois = 48
+            # Calcul de la date approximative (on soustrait l'âge estimé à aujourd'hui)
+            date_naissance = datetime.today().date() - timedelta(days=age_estime_mois * 30)
+            st.date_input("Date estimée (d'après dentition)", value=date_naissance, disabled=True)
+        
+        race = st.selectbox("Race", list(Config.RACES.keys()))
+        etat_physio = st.selectbox("État physiologique", Config.ETATS_PHYSIO)
+        photo_profil = st.file_uploader("Photo de profil (optionnelle)", type=['jpg','png','jpeg'])
+        photo_mamelle = st.file_uploader("Photo mamelle (optionnelle)", type=['jpg','png','jpeg'])
+        poids_vif = st.number_input("Poids vif (kg) (optionnel)", min_value=0.0, value=0.0, step=0.5)
+        
+        submitted = st.form_submit_button("Ajouter")
+        if submitted and numero_id:
+            # Vérifier si la colonne poids_vif existe
+            cursor = db.conn.execute("PRAGMA table_info(brebis)")
+            columns = [col[1] for col in cursor.fetchall()]
+            if 'poids_vif' not in columns:
+                db.execute("ALTER TABLE brebis ADD COLUMN poids_vif REAL")
+                st.info("Colonne poids_vif ajoutée automatiquement.")
+            
+            elevage_id = elevages_dict[elevage_choice]
+            profil_filename = save_uploaded_photo(photo_profil)
+            mamelle_filename = save_uploaded_photo(photo_mamelle)
+            
+            db.execute("""
+                INSERT INTO brebis 
+                (elevage_id, numero_id, nom, race, date_naissance, etat_physio, photo_profil, photo_mamelle, poids_vif)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+            """, (
+                elevage_id, numero_id, "", race,
+                date_naissance.isoformat(), etat_physio,
+                profil_filename, mamelle_filename, poids_vif if poids_vif>0 else None
+            ))
+            st.success("Brebis ajoutée")
+            st.rerun()
+        elif submitted and not numero_id:
+            st.error("Le numéro d'identification est obligatoire.")
             
             params_brebis = [st.session_state.user_id]
             query_brebis = """
