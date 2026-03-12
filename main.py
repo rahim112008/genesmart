@@ -1607,6 +1607,7 @@ def page_analyse():
 def page_gestion_elevage():
     st.title("🐑 Gestion des élevages")
     
+    # Résumé de l'éleveur actif
     if st.session_state.eleveur_id is not None:
         eleveur = db.fetchone("SELECT nom, region FROM eleveurs WHERE id=?", (st.session_state.eleveur_id,))
         if eleveur:
@@ -1658,6 +1659,7 @@ def page_gestion_elevage():
     
     tab1, tab2, tab3 = st.tabs(["👨‍🌾 Éleveurs", "🏡 Élevages", "🐑 Brebis"])
     
+    # --- Onglet Éleveurs ---
     with tab1:
         st.subheader("Liste des éleveurs")
         
@@ -1698,6 +1700,7 @@ def page_gestion_elevage():
         else:
             st.info("Aucun éleveur enregistré.")
     
+    # --- Onglet Élevages ---
     with tab2:
         st.subheader("Liste des élevages")
         
@@ -1734,12 +1737,14 @@ def page_gestion_elevage():
             """
             query, params = filtrer_par_eleveur(query, params, join_eleveur=True)
             elevages = db.fetchall(query, params)
+            
             if not elevages:
                 st.info("Aucun élevage pour cet éleveur.")
             else:
                 df = pd.DataFrame(elevages, columns=["ID", "Nom", "Localisation", "Superficie", "Éleveur"])
                 st.dataframe(df, use_container_width=True, hide_index=True)
     
+    # --- Onglet Brebis ---
     with tab3:
         st.subheader("Liste des brebis")
         
@@ -1760,17 +1765,37 @@ def page_gestion_elevage():
             with st.expander("➕ Ajouter une brebis", expanded=False):
                 with st.form("form_brebis"):
                     elevage_choice = st.selectbox("Élevage", list(elevages_dict.keys()))
-                    numero_id = st.text_input("Numéro d'identification")
-                    nom_brebis = st.text_input("Nom")
+                    numero_id = st.text_input("Numéro d'identification (obligatoire)")
+                    
+                    # Âge : choix entre date et dentition
+                    age_mode = st.radio("Mode de saisie de l'âge", ["Date de naissance", "Dentition"])
+                    date_naissance = None
+                    if age_mode == "Date de naissance":
+                        date_naissance = st.date_input("Date de naissance", value=datetime.today().date())
+                    else:
+                        dentition = st.selectbox("Dentition", ["Dents de lait", "2 dents", "4 dents", "6 dents ou plus"])
+                        # Estimation d'un âge en mois et calcul d'une date approximative
+                        if dentition == "Dents de lait":
+                            age_estime_mois = 6
+                        elif dentition == "2 dents":
+                            age_estime_mois = 18
+                        elif dentition == "4 dents":
+                            age_estime_mois = 30
+                        else:
+                            age_estime_mois = 48
+                        # On soustrait l'âge estimé à la date d'aujourd'hui pour obtenir une date approximative
+                        date_naissance = datetime.today().date() - timedelta(days=age_estime_mois*30)
+                        st.info(f"Âge estimé à {age_estime_mois} mois, date approximative : {date_naissance}")
+                    
                     race = st.selectbox("Race", list(Config.RACES.keys()))
-                    date_naissance = st.date_input("Date de naissance", value=datetime.today().date())
                     etat_physio = st.selectbox("État physiologique", Config.ETATS_PHYSIO)
-                    photo_profil = st.file_uploader("Photo de profil", type=['jpg','png','jpeg'])
-                    photo_mamelle = st.file_uploader("Photo mamelle", type=['jpg','png','jpeg'])
-                    poids_vif = st.number_input("Poids vif (kg)", min_value=0.0, value=45.0, step=0.5)
+                    photo_profil = st.file_uploader("Photo de profil (optionnelle)", type=['jpg','png','jpeg'])
+                    photo_mamelle = st.file_uploader("Photo mamelle (optionnelle)", type=['jpg','png','jpeg'])
+                    poids_vif = st.number_input("Poids vif (kg) (optionnel)", min_value=0.0, value=0.0, step=0.5)
                     
                     submitted = st.form_submit_button("Ajouter")
-                    if submitted:
+                    if submitted and numero_id:
+                        # Vérifier si la colonne poids_vif existe
                         cursor = db.conn.execute("PRAGMA table_info(brebis)")
                         columns = [col[1] for col in cursor.fetchall()]
                         if 'poids_vif' not in columns:
@@ -1786,16 +1811,18 @@ def page_gestion_elevage():
                             (elevage_id, numero_id, nom, race, date_naissance, etat_physio, photo_profil, photo_mamelle, poids_vif)
                             VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
                         """, (
-                            elevage_id, numero_id, nom_brebis, race, 
+                            elevage_id, numero_id, "", race,  # on met une chaîne vide pour le nom
                             date_naissance.isoformat(), etat_physio,
-                            profil_filename, mamelle_filename, poids_vif
+                            profil_filename, mamelle_filename, poids_vif if poids_vif>0 else None
                         ))
                         st.success("Brebis ajoutée")
                         st.rerun()
+                    elif submitted and not numero_id:
+                        st.error("Le numéro d'identification est obligatoire.")
             
             params_brebis = [st.session_state.user_id]
             query_brebis = """
-                SELECT b.id, b.numero_id, b.nom, b.race, b.date_naissance, b.etat_physio, e.nom, b.poids_vif
+                SELECT b.id, b.numero_id, b.nom, b.race, b.date_naissance, b.etat_physio, e.nom, b.poids_vif, b.photo_profil, b.photo_mamelle
                 FROM brebis b
                 JOIN elevages e ON b.elevage_id = e.id
                 JOIN eleveurs el ON e.eleveur_id = el.id
@@ -1803,23 +1830,31 @@ def page_gestion_elevage():
             """
             query_brebis, params_brebis = filtrer_par_eleveur(query_brebis, params_brebis, join_eleveur=True)
             brebis = db.fetchall(query_brebis, params_brebis)
+            
             if brebis:
-                df_brebis = pd.DataFrame(brebis, columns=["ID", "Numéro", "Nom", "Race", "Naissance", "État", "Élevage", "Poids vif (kg)"])
-                st.dataframe(df_brebis, use_container_width=True, hide_index=True)
+                df_brebis = pd.DataFrame(brebis, columns=["ID", "Numéro", "Nom", "Race", "Naissance", "État", "Élevage", "Poids vif (kg)", "Photo profil", "Photo mamelle"])
+                st.dataframe(df_brebis[["Numéro", "Race", "Naissance", "État", "Élevage", "Poids vif (kg)"]], use_container_width=True, hide_index=True)
                 
                 st.divider()
                 st.subheader("🐑 Suivi individuel")
-                selected_brebis = st.selectbox("Choisir une brebis", [f"{b[0]} - {b[1]} {b[2]}" for b in brebis], key="suivi_select")
+                selected_brebis = st.selectbox("Choisir une brebis", [f"{b[0]} - {b[1]}" for b in brebis], key="suivi_select")
                 bid = int(selected_brebis.split(" - ")[0])
                 
-                brebis_info = db.fetchone("SELECT numero_id, nom, race, date_naissance, poids_vif FROM brebis WHERE id=?", (bid,))
+                # Récupérer les infos de la brebis
+                brebis_info = db.fetchone("SELECT numero_id, nom, race, date_naissance, poids_vif, photo_profil, photo_mamelle FROM brebis WHERE id=?", (bid,))
                 if brebis_info:
                     col1, col2, col3 = st.columns(3)
                     col1.metric("Numéro", brebis_info[0])
-                    col2.metric("Nom", brebis_info[1])
+                    col2.metric("Nom", brebis_info[1] if brebis_info[1] else "Non renseigné")
                     col3.metric("Race", brebis_info[2])
-                    age = (datetime.now() - datetime.strptime(brebis_info[3], "%Y-%m-%d")).days // 365 if brebis_info[3] else 0
-                    st.metric("Âge (ans)", age)
+                    if brebis_info[3]:
+                        naiss = datetime.strptime(brebis_info[3], "%Y-%m-%d").date()
+                        age_jours = (datetime.today().date() - naiss).days
+                        age_mois = age_jours // 30
+                        age_ans = age_jours // 365
+                        st.metric("Âge", f"{age_ans} ans ({age_mois} mois)")
+                    else:
+                        st.metric("Âge", "Non renseigné")
                     st.metric("Dernier poids connu", f"{brebis_info[4]} kg" if brebis_info[4] else "Non renseigné")
                 
                 tab_hist1, tab_hist2, tab_hist3, tab_hist4 = st.tabs(["📈 Poids", "🥛 Production", "📏 Morphométrie", "📝 Notes"])
@@ -1886,7 +1921,9 @@ def page_gestion_elevage():
                     else:
                         st.info("Aucune mesure morphométrique.")
                     
+                    # Bouton pour aller à la photogrammétrie avec cette brebis
                     if st.button("📸 Aller à la photogrammétrie pour cette brebis"):
+                        st.session_state.brebis_analyse_id = bid
                         st.session_state.current_page = "analyse"
                         st.rerun()
                 
@@ -1929,15 +1966,28 @@ def page_gestion_elevage():
                         st.success("Brebis supprimée")
                         st.rerun()
                 with col2:
+                    # Bouton pour afficher les détails complets de manière structurée
                     if st.button("📋 Voir détails complets", key="details_brebis_suivi"):
                         b = db.fetchone("SELECT * FROM brebis WHERE id=?", (bid,))
                         cols = [col[0] for col in db.conn.execute("PRAGMA table_info(brebis)").fetchall()]
                         data = dict(zip(cols, b))
-                        if data.get('photo_profil'):
-                            data['photo_profil'] = f"Fichier: {data['photo_profil']}"
-                        if data.get('photo_mamelle'):
-                            data['photo_mamelle'] = f"Fichier: {data['photo_mamelle']}"
-                        st.json(data)
+                        with st.expander("Détails de la brebis", expanded=True):
+                            col_a, col_b = st.columns(2)
+                            with col_a:
+                                st.metric("Numéro", data.get('numero_id', 'N/A'))
+                                st.metric("Race", data.get('race', 'N/A'))
+                                st.metric("État physiologique", data.get('etat_physio', 'N/A'))
+                                if data.get('date_naissance'):
+                                    naiss = datetime.strptime(data['date_naissance'], "%Y-%m-%d").date()
+                                    age_jours = (datetime.today().date() - naiss).days
+                                    age_mois = age_jours // 30
+                                    st.metric("Âge", f"{age_mois} mois")
+                            with col_b:
+                                st.metric("Poids vif (kg)", data.get('poids_vif', 'Non renseigné'))
+                                if data.get('photo_profil'):
+                                    st.image(os.path.join(PHOTO_DIR, data['photo_profil']), caption="Photo de profil", width=200)
+                                if data.get('photo_mamelle'):
+                                    st.image(os.path.join(PHOTO_DIR, data['photo_mamelle']), caption="Photo mamelle", width=200)
             else:
                 st.info("Aucune brebis enregistrée.")
 
