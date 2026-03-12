@@ -1602,7 +1602,7 @@ def page_analyse():
         st.info(f"Niveau : {lait['niveau']}")
 
 # -----------------------------------------------------------------------------
-# PAGE GESTION ÉLEVAGE (corrigée)
+# PAGE GESTION ÉLEVAGE (complète et corrigée)
 # -----------------------------------------------------------------------------
 def page_gestion_elevage():
     st.title("🐑 Gestion des élevages")
@@ -1658,6 +1658,7 @@ def page_gestion_elevage():
     
     tab1, tab2, tab3 = st.tabs(["👨‍🌾 Éleveurs", "🏡 Élevages", "🐑 Brebis"])
     
+    # --- Onglet Éleveurs ---
     with tab1:
         st.subheader("Liste des éleveurs")
         
@@ -1698,6 +1699,7 @@ def page_gestion_elevage():
         else:
             st.info("Aucun éleveur enregistré.")
     
+    # --- Onglet Élevages ---
     with tab2:
         st.subheader("Liste des élevages")
         
@@ -1740,6 +1742,7 @@ def page_gestion_elevage():
                 df = pd.DataFrame(elevages, columns=["ID", "Nom", "Localisation", "Superficie", "Éleveur"])
                 st.dataframe(df, use_container_width=True, hide_index=True)
     
+    # --- Onglet Brebis ---
     with tab3:
         st.subheader("Liste des brebis")
         
@@ -1757,7 +1760,8 @@ def page_gestion_elevage():
         if not elevages_dict:
             st.warning("Aucun élevage pour cet éleveur. Veuillez d'abord ajouter un élevage.")
         else:
-                        with st.expander("➕ Ajouter une brebis", expanded=False):
+            # Formulaire d'ajout de brebis
+            with st.expander("➕ Ajouter une brebis", expanded=False):
                 with st.form("form_brebis"):
                     elevage_choice = st.selectbox("Élevage", list(elevages_dict.keys()))
                     numero_id = st.text_input("Numéro d'identification (obligatoire)")
