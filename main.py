@@ -1504,8 +1504,13 @@ def page_analyse():
             if len(points_mamelles) >= 6:
                 long_trayon_g = np.sqrt((points_mamelles[0][0]-points_mamelles[1][0])**2 + (points_mamelles[0][1]-points_mamelles[1][1])**2) / facteur
                 long_trayon_d = np.sqrt((points_mamelles[2][0]-points_mamelles[3][0])**2 + (points_mamelles[2][1]-points_mamelles[3][1])**2) / facteur
+                # Bornes pour respecter les limites
+                long_trayon_g = min(15.0, long_trayon_g)
+                long_trayon_d = min(15.0, long_trayon_d)
                 diam_trayon = (long_trayon_g + long_trayon_d) / 4
+                diam_trayon = min(5.0, diam_trayon)  # ne pas dépasser 5 cm
                 attache_px = np.sqrt((points_mamelles[4][0]-points_mamelles[5][0])**2 + (points_mamelles[4][1]-points_mamelles[5][1])**2) / facteur
+                attache_px = min(30.0, attache_px)  # limite optionnelle
                 symetrie = "Symétrique" if abs(long_trayon_g - long_trayon_d) < 0.5 else "Asymétrique"
                 mesures['long_trayon_g'] = long_trayon_g
                 mesures['long_trayon_d'] = long_trayon_d
@@ -1540,32 +1545,32 @@ def page_analyse():
     col1, col2 = st.columns(2)
     with col1:
         longueur = st.number_input("Longueur corps (cm)", min_value=30.0, max_value=120.0,
-                                   value=st.session_state.get('longueur_corps', 70.0), key="longueur_corps_input")
+                                   value=max(30.0, min(120.0, st.session_state.get('longueur_corps', 70.0))), key="longueur_corps_input")
         hauteur = st.number_input("Hauteur garrot (cm)", min_value=30.0, max_value=90.0,
-                                  value=st.session_state.get('hauteur_garrot', 65.0), key="hauteur_garrot_input")
+                                  value=max(30.0, min(90.0, st.session_state.get('hauteur_garrot', 65.0))), key="hauteur_garrot_input")
         poitrine = st.number_input("Tour de poitrine (cm)", min_value=40.0, max_value=130.0,
-                                   value=st.session_state.get('tour_poitrine', 80.0), key="tour_poitrine_input")
+                                   value=max(40.0, min(130.0, st.session_state.get('tour_poitrine', 80.0))), key="tour_poitrine_input")
         canon = st.number_input("Circonférence canon (cm)", min_value=5.0, max_value=15.0,
-                                value=st.session_state.get('circonf_canon', 8.0), key="circonf_canon_input")
+                                value=max(5.0, min(15.0, st.session_state.get('circonf_canon', 8.0))), key="circonf_canon_input")
     with col2:
         bassin = st.number_input("Largeur bassin (cm)", min_value=10.0, max_value=40.0,
-                                 value=st.session_state.get('largeur_bassin', 20.0), key="largeur_bassin_input")
+                                 value=max(10.0, min(40.0, st.session_state.get('largeur_bassin', 20.0))), key="largeur_bassin_input")
         queue = st.number_input("Longueur queue (cm)", min_value=0.0, max_value=50.0,
                                 value=st.session_state.get('longueur_queue', 20.0), key="longueur_queue_input")
         largeur_thorax = st.number_input("Largeur thorax (cm)", min_value=10.0, max_value=50.0,
-                                         value=st.session_state.get('largeur_thorax', 25.0), key="largeur_thorax_input")
+                                         value=max(10.0, min(50.0, st.session_state.get('largeur_thorax', 25.0))), key="largeur_thorax_input")
         profondeur_thorax = st.number_input("Profondeur thorax (cm)", min_value=10.0, max_value=50.0,
-                                            value=st.session_state.get('profondeur_thorax', 30.0), key="profondeur_thorax_input")
+                                            value=max(10.0, min(50.0, st.session_state.get('profondeur_thorax', 30.0))), key="profondeur_thorax_input")
 
     st.subheader("🥛 Mesures mamelles manuelles")
     col3, col4 = st.columns(2)
     with col3:
         long_trayon_g = st.number_input("Longueur trayon gauche (cm)", min_value=1.0, max_value=15.0,
-                                        value=st.session_state.get('long_trayon_g', 5.0), key="long_trayon_g_input")
+                                        value=max(1.0, min(15.0, st.session_state.get('long_trayon_g', 5.0))), key="long_trayon_g_input")
         long_trayon_d = st.number_input("Longueur trayon droit (cm)", min_value=1.0, max_value=15.0,
-                                        value=st.session_state.get('long_trayon_d', 5.0), key="long_trayon_d_input")
+                                        value=max(1.0, min(15.0, st.session_state.get('long_trayon_d', 5.0))), key="long_trayon_d_input")
         diam_trayon = st.number_input("Diamètre trayon (cm)", min_value=0.5, max_value=5.0,
-                                      value=st.session_state.get('diam_trayon', 2.5), key="diam_trayon_input")
+                                      value=max(0.5, min(5.0, st.session_state.get('diam_trayon', 2.5))), key="diam_trayon_input")
     with col4:
         attache = st.number_input("Largeur attache (cm)", min_value=0.0, max_value=30.0,
                                   value=st.session_state.get('attache', 10.0), key="attache_input")
@@ -1582,6 +1587,7 @@ def page_analyse():
         # Vous pouvez ajouter ici la sauvegarde en base avec brebis_id, par exemple :
         # if st.button("💾 Enregistrer dans la base"):
         #     db.execute(...)
+       
 
 # -----------------------------------------------------------------------------
 # Les autres pages (gestion élevage, production, génomique avancée, santé, reproduction, nutrition, export, élite, IA, apprentissage)
